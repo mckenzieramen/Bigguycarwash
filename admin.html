@@ -110,12 +110,23 @@
 
     <section id="reports" class="tab-panel hidden">
       <div class="card inner">
-        <h2>Reports</h2>
+        <h2>Sales Reports</h2>
         <div class="report-controls">
           <input id="reportDate" type="date">
           <button onclick="makeReport('daily')">DAILY</button>
           <button onclick="makeReport('monthly')">MONTHLY</button>
           <button onclick="makeReport('yearly')">YEARLY</button>
+        </div>
+
+        <div class="daily-reconciliation">
+          <h3>Daily Cash Reconciliation</h3>
+          <p class="muted">Total Sale is calculated automatically from the Sales entries for the selected date. Enter the Cash, Expenses, and actual Cash Remitted to calculate Short/Over.</p>
+          <div class="reconciliation-grid">
+            <div><label>Cash</label><input id="reportCash" type="number" min="0" step=".01" placeholder="₱0.00"></div>
+            <div><label>Expenses</label><input id="reportExpenses" type="number" min="0" step=".01" placeholder="₱0.00"></div>
+            <div><label>Cash Remitted</label><input id="reportCashRemitted" type="number" min="0" step=".01" placeholder="₱0.00"></div>
+            <div class="reconciliation-action"><label>&nbsp;</label><button id="saveDailyReport">SAVE DAILY REPORT</button></div>
+          </div>
         </div>
         <div id="reportOutput"></div>
       </div>

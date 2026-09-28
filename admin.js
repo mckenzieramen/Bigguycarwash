@@ -1,6 +1,11 @@
 const ADMIN_EMAIL="bigguy@admin.com",ADMIN_PASSWORD="bigguyadmin123";
 const KEY="bigguys_dtr_v2",MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
-let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
+let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{},"dailyReports":{}}');
+state.employees=Array.isArray(state.employees)?state.employees:[];
+state.attendance=Array.isArray(state.attendance)?state.attendance:[];
+state.sales=Array.isArray(state.sales)?state.sales:[];
+state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
+state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
@@ -111,4 +116,69 @@ function deleteEmployee(id){
  refresh();
 }
 
-function makeReport(mode){const d=$("reportDate").value||today(),prefix=mode==="yearly"?d.slice(0,4):mode==="monthly"?d.slice(0,7):d,m=x=>mode==="yearly"?x.date.startsWith(prefix):mode==="monthly"?x.date.startsWith(prefix):x.date===prefix,sales=state.sales.filter(m).reduce((t,x)=>t+x.amount,0);let payroll=0;[...new Set(state.attendance.filter(m).map(x=>x.date))].forEach(day=>state.employees.forEach(e=>payroll+=pay(e,day)));$("reportOutput").innerHTML=`<div class="report-box"><h3>${mode.toUpperCase()} REPORT</h3><p>Total Sales: <strong>${money(sales)}</strong></p><p>Total Payroll: <strong>${money(payroll)}</strong></p><p>Net before other expenses: <strong>${money(sales-payroll)}</strong></p></div>`}
+function reportDates(){
+ const dates=new Set();
+ state.sales.forEach(s=>{if(s.date)dates.add(s.date)});
+ Object.keys(state.dailyReports).forEach(d=>dates.add(d));
+ return [...dates].sort().reverse();
+}
+function dailyFinancials(date){
+ const totalSale=state.sales.filter(x=>x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);
+ const r=state.dailyReports[date]||{};
+ const cash=Number(r.cash||0),expenses=Number(r.expenses||0),cashRemitted=Number(r.cashRemitted||0);
+ const hasRemitted=r.cashRemitted!==undefined&&r.cashRemitted!==null&&r.cashRemitted!=="";
+ const expected=totalSale-cash-expenses;
+ const difference=hasRemitted?cashRemitted-expected:0;
+ return {totalSale,cash,expenses,cashRemitted,expected,difference,short:difference<0?Math.abs(difference):0,over:difference>0?difference:0,hasRemitted};
+}
+function saveDailyReport(){
+ const date=$("reportDate").value||today();
+ const cash=Number($("reportCash").value||0),expenses=Number($("reportExpenses").value||0);
+ const remittedValue=$("reportCashRemitted").value;
+ state.dailyReports[date]={cash,expenses,cashRemitted:remittedValue===""?null:Number(remittedValue)};
+ save();
+ makeReport("daily");
+}
+function loadDailyReportInputs(){
+ const date=$("reportDate").value||today(),r=state.dailyReports[date]||{};
+ $("reportCash").value=r.cash??"";
+ $("reportExpenses").value=r.expenses??"";
+ $("reportCashRemitted").value=r.cashRemitted??"";
+}
+function periodRows(mode,selected){
+ const prefix=mode==="yearly"?selected.slice(0,4):selected.slice(0,7);
+ const periods=new Set();
+ reportDates().forEach(date=>{if(date.startsWith(prefix))periods.add(mode==="yearly"?date.slice(0,4):date.slice(0,7))});
+ return [...periods].sort().reverse();
+}
+function periodFinancials(mode,period){
+ const dates=reportDates().filter(date=>mode==="yearly"?date.startsWith(period):date.startsWith(period));
+ let totalSale=0,cash=0,expenses=0,cashRemitted=0,short=0,over=0,payroll=0,remittedCount=0;
+ dates.forEach(date=>{
+   const f=dailyFinancials(date); totalSale+=f.totalSale; cash+=f.cash; expenses+=f.expenses;
+   if(f.hasRemitted){cashRemitted+=f.cashRemitted;remittedCount++;short+=f.short;over+=f.over;}
+   const attendanceDates=state.attendance.filter(a=>a.date===date);
+   state.employees.forEach(e=>{if(attendanceDates.some(a=>a.employeeId===e.id))payroll+=pay(e,date)});
+ });
+ return {totalSale,cash,expenses,cashRemitted,short,over,payroll,remittedCount,net:totalSale-expenses-payroll};
+}
+function makeReport(mode){
+ const d=$("reportDate").value||today();
+ $("reportDate").value=d;
+ if(mode==="daily"){
+   loadDailyReportInputs();
+   const dates=reportDates();
+   const rows=dates.map(date=>{const f=dailyFinancials(date);return [date,money(f.totalSale),money(f.cash),money(f.expenses),f.hasRemitted?money(f.cashRemitted):"—",f.hasRemitted&&f.short?money(f.short):"—",f.hasRemitted&&f.over?money(f.over):"—"]});
+   $("reportOutput").innerHTML=`<div class="report-box"><h3>DAILY SALES REPORT</h3><p class="muted">Daily reconciliation based on the format provided: Total Sale, Cash, Expenses, Cash Remitted, Short, and Over.</p>${table(rows,["DATE","TOTAL SALE","CASH","EXPENSES","CASH REMITTED","SHORT","OVER"])}</div>`;
+   return;
+ }
+ const prefix=mode==="yearly"?d.slice(0,4):d.slice(0,7);
+ const periods=periodRows(mode,d);
+ const rows=periods.map(period=>{const f=periodFinancials(mode,period);return [period,money(f.totalSale),money(f.cash),money(f.expenses),f.remittedCount?money(f.cashRemitted):"—",f.remittedCount&&f.short?money(f.short):"—",f.remittedCount&&f.over?money(f.over):"—",money(f.payroll),money(f.net)]});
+ const empty=!rows.length?'<p class="muted">No sales or reconciliation records for the selected period.</p>':table(rows,[mode==="monthly"?"MONTH":"YEAR","TOTAL SALES","CASH","EXPENSES","CASH REMITTED","SHORT","OVER","PAYROLL","NET AFTER PAYROLL"]);
+ $("reportOutput").innerHTML=`<div class="report-box"><h3>${mode.toUpperCase()} SALES REPORT</h3><p class="muted">${mode==="monthly"?`Monthly summary for ${prefix}`:`Yearly summary for ${prefix}`}</p>${empty}</div>`;
+}
+$("reportDate").value=today();
+$("reportDate").addEventListener("change",loadDailyReportInputs);
+$("saveDailyReport").onclick=saveDailyReport;
+
