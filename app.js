@@ -31,11 +31,23 @@ function normalizeFaceRecords(value){
 }
 function faceDistance(a,b){let sum=0;for(let i=0;i<a.length;i++){const d=a[i]-b[i];sum+=d*d}return Math.sqrt(sum)}
 function faceIsInsideOval(d){
- const video=$("camera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
- const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
- const rx=.23,ry=.40,ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
- const faceHeight=box.height/h,faceWidth=box.width/w;
- return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
+ const video=$("camera"),box=d.detection.box;
+ const vw=video.videoWidth||720,vh=video.videoHeight||720;
+ const cw=video.clientWidth||video.parentElement?.clientWidth||vw,ch=video.clientHeight||430;
+ // The camera uses object-fit: cover, so compare the detected face against
+ // the oval in the actual displayed/cropped video coordinates, not the raw frame.
+ const scale=Math.max(cw/vw,ch/vh);
+ const rw=vw*scale,rh=vh*scale;
+ const ox=(cw-rw)/2,oy=(ch-rh)/2;
+ const fx=(box.x+box.width/2)*scale+ox;
+ const fy=(box.y+box.height/2)*scale+oy;
+ const fw=box.width*scale,fh=box.height*scale;
+ const cx=fx/cw,cy=fy/ch;
+ // Slightly generous oval so normal camera movement does not block capture.
+ const rx=.29,ry=.43;
+ const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
+ const faceHeight=fh/ch,faceWidth=fw/cw;
+ return ellipse<=1&&faceHeight>=.18&&faceHeight<=.86&&faceWidth>=.11&&faceWidth<=.78;
 }
 function bestEmployee(descriptor){
  let best=null,bestDistance=Infinity;
