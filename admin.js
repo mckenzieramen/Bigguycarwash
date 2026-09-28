@@ -1,16 +1,17 @@
 const ADMIN_EMAIL="bigguy@admin.com",ADMIN_PASSWORD="bigguyadmin123";
 const KEY="bigguys_dtr_v2",MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
-let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{},"dailyReports":{}}');
+let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{},"faceSnapshots":{},"dailyReports":{}}');
 state.employees=Array.isArray(state.employees)?state.employees:[];
 state.attendance=Array.isArray(state.attendance)?state.attendance:[];
 state.sales=Array.isArray(state.sales)?state.sales:[];
 state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
+state.faceSnapshots=state.faceSnapshots&&typeof state.faceSnapshots==="object"?state.faceSnapshots:{};
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
 function syncStateFromStorage(){
- try{const raw=JSON.parse(localStorage.getItem(KEY)||"{}");if(!raw||typeof raw!=="object")return;state.employees=Array.isArray(raw.employees)?raw.employees:[];state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];state.sales=Array.isArray(raw.sales)?raw.sales:[];state.faces=raw.faces&&typeof raw.faces==="object"?raw.faces:{};state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{}}catch(e){console.warn("Could not sync dashboard data",e)}
+ try{const raw=JSON.parse(localStorage.getItem(KEY)||"{}");if(!raw||typeof raw!=="object")return;state.employees=Array.isArray(raw.employees)?raw.employees:[];state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];state.sales=Array.isArray(raw.sales)?raw.sales:[];state.faces=raw.faces&&typeof raw.faces==="object"?raw.faces:{};state.faceSnapshots=raw.faceSnapshots&&typeof raw.faceSnapshots==="object"?raw.faceSnapshots:{};state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{}}catch(e){console.warn("Could not sync dashboard data",e)}
 }
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -74,8 +75,8 @@ function refresh(){
  if($("payrollTotal"))$("payrollTotal").textContent=money(state.employees.reduce((t,e)=>t+pay(e,d),0));
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*commRate(a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
- $("attendanceTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);return[e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",statusBadge(a?.status||"awol")]}),["ID","Employee","Scheduled","Clock In","Clock Out","Status"]);
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
+ $("attendanceTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);return[a?.date||d,e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",statusBadge(a?.status||"awol")]}),["Date","ID","Employee","Scheduled","Clock In","Clock Out","Status"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
  document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
@@ -134,6 +135,18 @@ function enrollmentFaceIsInsideOval(d){
  const faceHeight=box.height/h,faceWidth=box.width/w;
  return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
 }
+function captureEnrollmentOvalSnapshot(){
+ try{
+  const video=$("enrollCamera"),oval=$("enrollOvalFrame"),vr=video.getBoundingClientRect(),or=oval.getBoundingClientRect();
+  const vw=video.videoWidth||720,vh=video.videoHeight||720,dw=vr.width||video.clientWidth||720,dh=vr.height||video.clientHeight||430;
+  const scale=Math.max(dw/vw,dh/vh),rw=vw*scale,rh=vh*scale,ox=(dw-rw)/2,oy=(dh-rh)/2;
+  const x=or.left-vr.left,y=or.top-vr.top,w=or.width,h=or.height;
+  const sx=Math.max(0,(x-ox)/scale),sy=Math.max(0,(y-oy)/scale),ex=Math.min(vw,(x+w-ox)/scale),ey=Math.min(vh,(y+h-oy)/scale);
+  const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy),canvas=document.createElement("canvas");canvas.width=360;canvas.height=Math.max(420,Math.round(360*sh/sw));
+  const ctx=canvas.getContext("2d");ctx.save();ctx.translate(canvas.width,0);ctx.scale(-1,1);ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);ctx.restore();
+  return canvas.toDataURL("image/jpeg",.88);
+ }catch(e){console.warn("Could not capture enrollment oval",e);return ""}
+}
 async function captureEnrollmentSample(id){
  const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
  if(!d)return false;
@@ -160,6 +173,8 @@ async function runAutoEnrollment(){
  }
  if(enrollmentSamples.length>=5){
    state.faces[id]=enrollmentSamples;
+   const enrollmentImage=captureEnrollmentOvalSnapshot();
+   if(enrollmentImage)state.faceSnapshots[id]=enrollmentImage;
    save();
    $("enrollStatus").textContent="✓ Face enrollment complete. 8 sample slots were collected when available.";
    $("enrollResult").innerHTML=`<div class="result success">✓ Employee face enrolled successfully.<br><small>${enrollmentSamples.length} face samples saved. The DTR can now recognize this employee automatically.</small></div>`;
@@ -173,6 +188,19 @@ async function runAutoEnrollment(){
 $("startEnrollCamera").onclick=async()=>{if(!await loadModels())return;try{enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});$("enrollCamera").srcObject=enrollStream;$('enrollFace').disabled=false;$('enrollStatus').textContent="Camera ready — press ENROLL FACE to begin automatic multi-sample capture."}catch(e){$('enrollStatus').textContent="Camera permission denied or unavailable."}};
 $("enrollFace").onclick=runAutoEnrollment;
 
+function showEmployeeHistory(id){
+ const e=state.employees.find(x=>x.id===id);
+ if(!e)return;
+ const rows=state.attendance.filter(a=>a.employeeId===id).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.clockIn||"").localeCompare(a.clockIn||""));
+ const html=rows.length?table(rows.map(a=>{
+   const sales=state.sales.filter(x=>x.employeeId===id&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
+   const hours=a.clockIn&&a.clockOut?((minutes(a.clockOut)-minutes(a.clockIn))/60).toFixed(2):"—";
+   return [a.date,a.clockIn||"—",a.clockOut||"—",statusBadge(a.status||"awol"),hours,money(sales),money(pay(e,a.date))];
+ }),["DATE","TIME IN","TIME OUT","STATUS","HOURS","SALES","DAILY PAY"]):'<p class="muted">No DTR history for this employee yet.</p>';
+ const box=$("employeeHistory");
+ if(box){box.innerHTML=`<div class="history-head"><div><h3>${e.name} — DTR History</h3><p class="muted">${e.id}</p></div><button type="button" id="closeHistory">CLOSE</button></div>${html}`;box.classList.remove("hidden");$("closeHistory").onclick=()=>box.classList.add("hidden");box.scrollIntoView({behavior:"smooth",block:"nearest"});}
+}
+function minutes(t){if(!t)return 0;const [h,m]=String(t).split(":").map(Number);return h*60+m}
 function deleteEmployee(id){
  const employee=state.employees.find(e=>e.id===id);
  if(!employee)return;
@@ -266,6 +294,7 @@ function activateTab(tab){
 document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();if(btn.id==="salesNav"){const sub=document.getElementById("salesSubnav");sub?.classList.toggle("open");activateTab("sales");}else activateTab(btn.dataset.tab)}));
 document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
 document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
+document.addEventListener("click",ev=>{const h=ev.target.closest(".history-employee");if(h)showEmployeeHistory(h.dataset.id);const d=ev.target.closest(".delete-employee");if(d)deleteEmployee(d.dataset.id);});
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
