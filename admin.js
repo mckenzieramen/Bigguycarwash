@@ -51,8 +51,52 @@ $("logoutBtn").onclick=()=>{$("dashboard").classList.add("hidden");$("adminLogin
 $("employeeForm").onsubmit=e=>{e.preventDefault();const id=$("empId").value.trim();if(state.employees.some(x=>x.id===id))return alert("Employee ID already exists.");state.employees.push({id,name:$("empName").value.trim(),type:$("empType").value,start:$("empStart").value});save();e.target.reset();$("empStart").value="08:00";refresh()};
 $("salesForm").onsubmit=e=>{e.preventDefault();state.sales.push({date:today(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value});save();e.target.reset();refresh()};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
-$("startEnrollCamera").onclick=async()=>{if(!await loadModels())return;try{enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720}},audio:false});$("enrollCamera").srcObject=enrollStream;$("enrollFace").disabled=false;$("enrollStatus").textContent="Camera ready — center the employee's face."}catch(e){$("enrollStatus").textContent="Camera permission denied or unavailable."}};
-$("enrollFace").onclick=async()=>{const id=$("enrollEmployee").value;if(!id)return;const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.5})).withFaceLandmarks(true).withFaceDescriptor();if(!d){$("enrollResult").innerHTML='<div class="result late-result">No clear face detected. Try again.</div>';return}state.faces[id]=Array.from(d.descriptor);save();$("enrollResult").innerHTML='<div class="result success">✓ Face enrolled successfully for this employee.</div>';refresh()};
+let enrollmentRunning=false,enrollmentSamples=[];
+function normalizeFaceRecords(value){
+ if(!value)return [];
+ if(Array.isArray(value)&&value.length&&Array.isArray(value[0]))return value;
+ if(Array.isArray(value))return [value];
+ return [];
+}
+function averageDescriptor(samples){
+ const len=samples[0].length,avg=new Array(len).fill(0);
+ for(const sample of samples)for(let i=0;i<len;i++)avg[i]+=sample[i];
+ for(let i=0;i<len;i++)avg[i]/=samples.length;
+ return avg;
+}
+async function captureEnrollmentSample(id){
+ const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
+ if(!d)return false;
+ enrollmentSamples.push(Array.from(d.descriptor));
+ $("enrollResult").innerHTML=`<div class="result success">Capturing face samples: <strong>${enrollmentSamples.length}/8</strong><br>Keep your face centered and make small natural movements.</div>`;
+ return true;
+}
+async function runAutoEnrollment(){
+ const id=$("enrollEmployee").value;if(!id||enrollmentRunning)return;
+ enrollmentRunning=true;enrollmentSamples=[];$("enrollFace").disabled=true;
+ $("enrollStatus").textContent="Automatic enrollment started — keep one face centered in the camera.";
+ let attempts=0;
+ while(enrollmentSamples.length<8&&attempts<80){
+   attempts++;
+   const ok=await captureEnrollmentSample(id);
+   if(!ok)$("enrollStatus").textContent="🔴 Face not clear yet — center the face and improve lighting.";
+   else $("enrollStatus").textContent=`🟢 Face detected — captured ${enrollmentSamples.length}/8 samples.`;
+   await new Promise(r=>setTimeout(r,500));
+ }
+ if(enrollmentSamples.length>=5){
+   state.faces[id]=enrollmentSamples;
+   save();
+   $("enrollStatus").textContent="✓ Face enrollment complete. 8 sample slots were collected when available.";
+   $("enrollResult").innerHTML=`<div class="result success">✓ Employee face enrolled successfully.<br><small>${enrollmentSamples.length} face samples saved. The DTR can now recognize this employee automatically.</small></div>`;
+   refresh();
+ }else{
+   $("enrollStatus").textContent="Enrollment failed — not enough clear face samples were captured. Try again with better lighting and keep the face centered.";
+   $("enrollResult").innerHTML='<div class="result late-result">Could not capture enough clear samples. Please start the camera again and try once more.</div>';
+ }
+ enrollmentRunning=false;$("enrollFace").disabled=false;
+}
+$("startEnrollCamera").onclick=async()=>{if(!await loadModels())return;try{enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});$("enrollCamera").srcObject=enrollStream;$('enrollFace').disabled=false;$('enrollStatus').textContent="Camera ready — press ENROLL FACE to begin automatic multi-sample capture."}catch(e){$('enrollStatus').textContent="Camera permission denied or unavailable."}};
+$("enrollFace").onclick=runAutoEnrollment;
 
 function deleteEmployee(id){
  const employee=state.employees.find(e=>e.id===id);
