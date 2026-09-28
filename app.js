@@ -1,10 +1,11 @@
 const KEY="bigguys_dtr_v2";
 const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
-let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false;
+let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false, attendanceCooldownUntil=0;
+const LAST_CAPTURE_KEY="bigguys_last_face_capture";
 const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const timeNow=()=>new Date().toTimeString().slice(0,5);
 const minutes=t=>{const [h,m]=t.split(":").map(Number);return h*60+m};
 function tick(){const n=new Date();$("liveTime").textContent=n.toLocaleTimeString("en-PH",{hour12:true});$("liveDate").textContent=n.toLocaleDateString("en-PH",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
@@ -44,11 +45,26 @@ function bestEmployee(descriptor){
  }
  return {employee:best,distance:bestDistance};
 }
+function saveFaceSnapshot(employee,detection){
+ try{
+  const video=$("camera"), vw=video.videoWidth||720, vh=video.videoHeight||720, box=detection.detection.box;
+  const padX=box.width*0.42, padY=box.height*0.55;
+  const sx=Math.max(0,box.x-padX), sy=Math.max(0,box.y-padY);
+  const sw=Math.min(vw-sx,box.width+padX*2), sh=Math.min(vh-sy,box.height+padY*2);
+  const canvas=document.createElement("canvas"); canvas.width=360; canvas.height=Math.max(360,Math.round(360*sh/sw));
+  const ctx=canvas.getContext("2d");
+  ctx.save(); ctx.translate(canvas.width,0); ctx.scale(-1,1);
+  ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height); ctx.restore();
+  localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify({employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.82),capturedAt:new Date().toISOString()}));
+ }catch(err){console.warn("Could not save face snapshot",err)}
+}
+
 async function verifyFace(detection){
  const match=bestEmployee(detection.descriptor);
  // Slightly more tolerant than the old single-sample matcher, while still requiring a real enrolled match.
  if(match.employee&&match.distance<=.60){
    recognizedEmployee=match.employee;
+   saveFaceSnapshot(match.employee,detection);
    $("cameraStatus").textContent=`✓ ${match.employee.name} recognized — choose TIME IN or TIME OUT`;
    $("employeeName").textContent=match.employee.name;$("employeeId").textContent=match.employee.id;$("recognized").classList.remove("hidden");$("timeIn").disabled=false;$("timeOut").disabled=false;setOval("good");
  }else{resetRecognition(match.employee?`Face detected, but match is not strong enough (${match.distance.toFixed(2)}). Look straight at the camera.`:"Face captured, but this employee is not enrolled.");setOval("bad")}
@@ -58,6 +74,11 @@ async function scanLoop(){
  try{
   const video=$("camera");
   if(video.readyState<2){$("cameraStatus").textContent="Starting live face scan…";return}
+  if(performance.now()<attendanceCooldownUntil){
+    setOval("bad");
+    $("cameraStatus").textContent="🔴 Ready — place the next face inside the oval.";
+    return;
+  }
   const detection=await faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
   if(detection){
    if(faceIsInsideOval(detection)){
@@ -73,18 +94,47 @@ async function scanLoop(){
  }catch(err){console.error("Face scan error:",err);if(!recognizedEmployee){setOval("bad");$("cameraStatus").textContent="Face scan is retrying…"}}
  finally{scanning=false;setTimeout(scanLoop,120)}
 }
+function clearAfterAttendance(message){
+  recognizedEmployee=null;
+  validSince=0;
+  captureBusy=false;
+  attendanceCooldownUntil=performance.now()+1200;
+  $("recognized").classList.add("hidden");
+  $("timeIn").disabled=true;
+  $("timeOut").disabled=true;
+  setOval("bad");
+  $("cameraStatus").textContent=message||"🔴 Ready — place the next face inside the oval.";
+}
 function record(type){
  if(!recognizedEmployee){$("result").innerHTML='<div class="result late-result">Face not recognized.</div>';return}
- const date=today(),now=timeNow();let attendance=state.attendance.find(a=>a.employeeId===recognizedEmployee.id&&a.date===date);
+ const employee=recognizedEmployee;
+ const date=today(),now=timeNow();
+ let attendance=state.attendance.find(a=>a.employeeId===employee.id&&a.date===date);
  if(type==="in"){
-  if(attendance){$("result").innerHTML='<div class="result late-result">TIME IN is already recorded today.</div>';return}
-  const diff=minutes(now)-minutes(recognizedEmployee.start),status=diff>0?"late":diff<0?"early":"ontime";attendance={date,employeeId:recognizedEmployee.id,clockIn:now,clockOut:null,status};state.attendance.push(attendance);save();
+  if(attendance){
+   $("result").innerHTML='<div class="result late-result">TIME IN is already recorded today.</div>';
+   clearAfterAttendance("🔴 Ready — place the next face inside the oval.");
+   return;
+  }
+  const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
+  attendance={date,employeeId:employee.id,clockIn:now,clockOut:null,status};
+  state.attendance.push(attendance);save();
   const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
-  $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${recognizedEmployee.name}<br>${now}<br><br>${statusText}</div>`;
+  $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
  }else{
-  if(!attendance){$("result").innerHTML='<div class="result late-result">TIME IN must be recorded first.</div>';return}
-  if(attendance.clockOut){$("result").innerHTML='<div class="result late-result">TIME OUT is already recorded today.</div>';return}
-  attendance.clockOut=now;save();$("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${recognizedEmployee.name}<br>${now}</div>`;
+  if(!attendance){
+   $("result").innerHTML='<div class="result late-result">TIME IN must be recorded first.</div>';
+   clearAfterAttendance("🔴 Ready — place the next face inside the oval.");
+   return;
+  }
+  if(attendance.clockOut){
+   $("result").innerHTML='<div class="result late-result">TIME OUT is already recorded today.</div>';
+   clearAfterAttendance("🔴 Ready — place the next face inside the oval.");
+   return;
+  }
+  attendance.clockOut=now;save();
+  $("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${employee.name}<br>${now}</div>`;
  }
+ clearAfterAttendance("🔴 Attendance saved — scanning for the next employee…");
 }
 $("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));window.addEventListener("load",startCamera);

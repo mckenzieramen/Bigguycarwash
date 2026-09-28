@@ -9,7 +9,10 @@ state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?stat
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
-const today=()=>new Date().toISOString().slice(0,10);
+function syncStateFromStorage(){
+ try{const raw=JSON.parse(localStorage.getItem(KEY)||"{}");if(!raw||typeof raw!=="object")return;state.employees=Array.isArray(raw.employees)?raw.employees:[];state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];state.sales=Array.isArray(raw.sales)?raw.sales:[];state.faces=raw.faces&&typeof raw.faces==="object"?raw.faces:{};state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{}}catch(e){console.warn("Could not sync dashboard data",e)}
+}
+const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const baseRate=t=>t==="full"?250:t==="semi"?200:150;
 const commRate=s=>s==="late"?.35:s==="awol"?.30:.40;
@@ -53,11 +56,17 @@ function refreshDashboardCharts(){
 }
 function refreshRightPanel(){
  const d=today(), records=state.attendance.filter(a=>a.date===d).slice().sort((a,b)=>(b.clockIn||"").localeCompare(a.clockIn||""));
- const a=records[0],e=a?state.employees.find(x=>x.id===a.employeeId):state.employees[0];
+ const captureEl=$("rightFaceCapture"),capturePlaceholder=$("rightFacePlaceholder");
+ let captured=null;
+ try{captured=JSON.parse(localStorage.getItem("bigguys_last_face_capture")||"null");}catch(e){}
+ const capturedEmployee=captured?.employeeId?state.employees.find(x=>x.id===captured.employeeId):null;
+ if(captured?.dataUrl&&captureEl&&capturedEmployee){captureEl.src=captured.dataUrl;captureEl.classList.remove("hidden");capturePlaceholder?.classList.add("hidden");}else{captureEl?.classList.add("hidden");capturePlaceholder?.classList.remove("hidden");}
+ const a=records[0],e=capturedEmployee|| (a?state.employees.find(x=>x.id===a.employeeId):state.employees[0]);
  const title=$("rightStatusTitle"),text=$("rightStatusText"),notice=$("rightNoticeTitle"),noticeText=$("rightNoticeText");
  if(e){const attendance=a&&a.employeeId===e.id?a:state.attendance.find(x=>x.employeeId===e.id&&x.date===d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}
 }
 function refresh(){
+ syncStateFromStorage();
  const d=today(),ds=state.sales.filter(x=>x.date===d),totalSales=ds.reduce((t,x)=>t+Number(x.amount||0),0);
  if($("salesTotal"))$("salesTotal").textContent=money(totalSales);
  if($("carsWashed"))$("carsWashed").textContent=ds.filter(x=>/carwash|wash/i.test(x.note||"")).length;
@@ -117,9 +126,22 @@ function averageDescriptor(samples){
  for(let i=0;i<len;i++)avg[i]/=samples.length;
  return avg;
 }
+function enrollmentFaceIsInsideOval(d){
+ const video=$("enrollCamera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
+ const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
+ const rx=.23,ry=.40;
+ const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
+ const faceHeight=box.height/h,faceWidth=box.width/w;
+ return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
+}
 async function captureEnrollmentSample(id){
  const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
  if(!d)return false;
+ const good=enrollmentFaceIsInsideOval(d);
+ const frame=$("enrollOvalFrame");
+ frame?.classList.toggle("oval-green",good);
+ frame?.classList.toggle("oval-red",!good);
+ if(!good)return false;
  enrollmentSamples.push(Array.from(d.descriptor));
  $("enrollResult").innerHTML=`<div class="result success">Capturing face samples: <strong>${enrollmentSamples.length}/8</strong><br>Keep your face centered and make small natural movements.</div>`;
  return true;
@@ -127,13 +149,13 @@ async function captureEnrollmentSample(id){
 async function runAutoEnrollment(){
  const id=$("enrollEmployee").value;if(!id||enrollmentRunning)return;
  enrollmentRunning=true;enrollmentSamples=[];$("enrollFace").disabled=true;
- $("enrollStatus").textContent="Automatic enrollment started — keep one face centered in the camera.";
+ $("enrollStatus").textContent="Automatic enrollment started — keep your face inside the green oval.";
  let attempts=0;
  while(enrollmentSamples.length<8&&attempts<80){
    attempts++;
    const ok=await captureEnrollmentSample(id);
-   if(!ok)$("enrollStatus").textContent="🔴 Face not clear yet — center the face and improve lighting.";
-   else $("enrollStatus").textContent=`🟢 Face detected — captured ${enrollmentSamples.length}/8 samples.`;
+   if(!ok)$("enrollStatus").textContent="🔴 Keep your face fully inside the oval and look toward the camera.";
+   else $("enrollStatus").textContent=`🟢 Face aligned — captured ${enrollmentSamples.length}/8 samples.`;
    await new Promise(r=>setTimeout(r,500));
  }
  if(enrollmentSamples.length>=5){
@@ -241,8 +263,10 @@ function activateTab(tab){
  if(tab!=="sales")document.getElementById("salesSubnav")?.classList.remove("open");
  document.getElementById("adminSidebar")?.classList.remove("open");
 }
-document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListener("click",()=>{if(btn.id==="salesNav"){document.getElementById("salesSubnav")?.classList.toggle("open");activateTab("sales");}else activateTab(btn.dataset.tab)}));
-document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",()=>activateTab(btn.dataset.tabTarget)));
-document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",()=>{activateTab("reports");makeReport(btn.dataset.reportMode)}));
+document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();if(btn.id==="salesNav"){const sub=document.getElementById("salesSubnav");sub?.classList.toggle("open");activateTab("sales");}else activateTab(btn.dataset.tab)}));
+document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
+document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
+window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
+setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));

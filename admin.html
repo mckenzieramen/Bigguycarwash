@@ -13,20 +13,20 @@
       <img src="assets/big-guys-logo.png" alt="Big Guy's Carwash">
     </div>
     <nav class="sidebar-nav" aria-label="Admin navigation">
-      <button class="side-nav active" data-tab="overview"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
-      <button class="side-nav" data-tab="employees"><span class="nav-icon">♙</span><span>Employees</span></button>
-      <button class="side-nav" data-tab="attendance"><span class="nav-icon">◷</span><span>DTR / Attendance</span></button>
-      <button class="side-nav sales-parent" data-tab="sales" id="salesNav"><span class="nav-icon">▣</span><span>Sales</span><span class="nav-chevron">⌄</span></button>
+      <button type="button" class="side-nav active" data-tab="overview"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 19.5z"/><path d="M9 21v-6h6v6"/></svg></span><span>Dashboard</span></button>
+      <button type="button" class="side-nav" data-tab="employees"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M14 15a5 5 0 0 1 7 5"/></svg></span><span>Employees</span></button>
+      <button type="button" class="side-nav" data-tab="attendance"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span>DTR / Attendance</span></button>
+      <button type="button" class="side-nav sales-parent" data-tab="sales" id="salesNav"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V3"/></svg></span><span>Sales</span><span class="nav-chevron">⌄</span></button>
       <div class="sales-subnav" id="salesSubnav">
         <button type="button" data-report-mode="daily">Daily Report</button>
         <button type="button" data-report-mode="monthly">Monthly Report</button>
         <button type="button" data-report-mode="yearly">Yearly Report</button>
       </div>
-      <button class="side-nav" data-tab="payroll"><span class="nav-icon">＄</span><span>Payroll</span></button>
-      <button class="side-nav" data-tab="reports"><span class="nav-icon">▤</span><span>Reports</span><span class="nav-chevron">⌄</span></button>
-      <button class="side-nav" data-tab="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
+      <button type="button" class="side-nav" data-tab="payroll"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M7 6V4h10v2"/><circle cx="12" cy="13" r="2.5"/><path d="M12 10.5v-1M12 16.5v-1"/></svg></span><span>Payroll</span></button>
+      <button type="button" class="side-nav" data-tab="reports"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h6M9 16h6"/></svg></span><span>Reports</span><span class="nav-chevron">⌄</span></button>
+      <button type="button" class="side-nav" data-tab="settings"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.2 2.1 2.4.7.7 2.4L18.4 10l-.7 2.4.7 2.4-2.1 1.8-.7 2.4-2.4.7L12 21l-1.2-2.1-2.4-.7-.7-2.4L5.6 14l.7-2.4-.7-2.4 2.1-1.8.7-2.4 2.4-.7z"/><circle cx="12" cy="12" r="3"/></svg></span><span>Settings</span></button>
     </nav>
-    <button class="side-nav logout-nav" id="logoutBtn"><span class="nav-icon">↪</span><span>Logout</span></button>
+    <button type="button" class="side-nav logout-nav" id="logoutBtn"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5M15 8l5 4-5 4M20 12H9"/></svg></span><span>Logout</span></button>
     <div class="sidebar-profile">
       <div class="profile-avatar">●</div>
       <div><strong>bigguy@admin.com</strong><small>Administrator</small></div>
@@ -80,7 +80,7 @@
 
         <section id="employees" class="tab-panel hidden">
           <div class="card inner"><h2>Employee Management</h2><form id="employeeForm" class="form-grid"><input id="empName" placeholder="Employee name" required><input id="empId" placeholder="Employee ID e.g. BG-001" required><select id="empType"><option value="full">Full Time — ₱250/day</option><option value="semi">Semi Full Time — ₱200/day</option><option value="part">Part Time — ₱150/day</option></select><input id="empStart" type="time" value="08:00" required><button type="submit">ADD EMPLOYEE</button></form><div id="employeeTable"></div></div>
-          <div class="card inner"><h2>Face Enrollment</h2><p class="muted">Select an employee, start the camera, then press ENROLL FACE. The system will automatically collect multiple clear face samples. The Employee DTR will then continuously scan and recognize the enrolled employee.</p><select id="enrollEmployee"></select><div class="camera-box admin-camera"><video id="enrollCamera" autoplay muted playsinline></video><div class="face-frame"></div><div id="enrollStatus" class="camera-status">Camera not started</div></div><div class="button-row"><button id="startEnrollCamera">START CAMERA</button><button id="enrollFace" disabled>ENROLL FACE</button></div><div id="enrollResult"></div></div>
+          <div class="card inner"><h2>Face Enrollment</h2><p class="muted">Select an employee, start the camera, then press ENROLL FACE. The system will automatically collect multiple clear face samples. The Employee DTR will then continuously scan and recognize the enrolled employee.</p><select id="enrollEmployee"></select><div class="camera-box admin-camera"><video id="enrollCamera" autoplay muted playsinline></video><div id="enrollOvalFrame" class="face-frame enrollment-oval oval-red"></div><div id="enrollStatus" class="camera-status">Camera not started</div></div><div class="button-row"><button id="startEnrollCamera">START CAMERA</button><button id="enrollFace" disabled>ENROLL FACE</button></div><div id="enrollResult"></div></div>
         </section>
         <section id="attendance" class="tab-panel hidden"><div class="card inner"><h2>DTR / Attendance</h2><div id="attendanceTable"></div></div></section>
         <section id="sales" class="tab-panel hidden"><div class="card inner"><h2>Sales</h2><form id="salesForm" class="form-grid"><select id="saleEmployee" required></select><input id="saleAmount" type="number" min="0" step=".01" placeholder="Sale amount ₱" required><input id="saleNote" placeholder="Service / note"><button type="submit">ADD SALE</button></form><div id="salesTable"></div></div></section>
@@ -93,7 +93,7 @@
         <div class="right-brand"><img src="assets/big-guys-logo.png" alt="Big Guy's"></div>
         <div class="digital-clock" id="digitalClock">7:45:22 AM</div>
         <div class="right-date" id="rightDate">Monday, September 28, 2026</div>
-        <div class="status-visual"><div class="status-orb">✓</div><h3 id="rightStatusTitle">Ready for Attendance</h3><p id="rightStatusText">Select an employee from DTR / Attendance to view the latest status.</p></div>
+        <div class="status-visual"><div id="rightFacePlaceholder" class="status-orb">✓</div><img id="rightFaceCapture" class="right-face-capture hidden" alt="Latest captured employee face"><h3 id="rightStatusTitle">Ready for Attendance</h3><p id="rightStatusText">Latest recognized employee will appear here after face verification.</p></div>
         <div class="employee-status-card"><div><span>Employee ID</span><b id="rightEmployeeId">—</b></div><div><span>Type</span><b id="rightEmployeeType">—</b></div><div><span>Schedule</span><b id="rightSchedule">—</b></div><div><span>Clock In</span><b id="rightClockIn">—</b></div></div>
         <div class="status-notice"><div class="notice-icon">✓</div><div><strong id="rightNoticeTitle">Attendance Status</strong><p id="rightNoticeText">No attendance action recorded yet.</p></div></div>
       </aside>
