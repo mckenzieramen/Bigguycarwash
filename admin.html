@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Big Guy's — Admin Dashboard</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="shell">
+  <section id="adminLogin" class="card login-card">
+    <img src="assets/big-guys-logo.png" class="logo" alt="Big Guy's Carwash">
+    <h1>Admin Login</h1>
+    <p class="muted">Big Guy's Carwash & Detailing Services</p>
+    <label>Email</label>
+    <input id="adminEmail" type="email" placeholder="Admin email">
+    <label>Password</label>
+    <input id="adminPassword" type="password" placeholder="Password">
+    <button id="loginBtn">LOGIN</button>
+    <p id="loginError" class="error"></p>
+    <a class="admin-link" href="./">Employee DTR</a>
+  </section>
+
+  <section id="dashboard" class="hidden">
+    <header class="admin-header">
+      <div class="brand">
+        <img src="assets/big-guys-logo.png" alt="">
+        <div><strong>ADMIN DASHBOARD</strong><small>Big Guy's Carwash & Detailing Services</small></div>
+      </div>
+      <button class="ghost" id="logoutBtn">LOGOUT</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="active" data-tab="overview">Dashboard</button>
+      <button data-tab="employees">Employees</button>
+      <button data-tab="attendance">DTR / Attendance</button>
+      <button data-tab="sales">Sales</button>
+      <button data-tab="payroll">Payroll</button>
+      <button data-tab="reports">Reports</button>
+    </nav>
+
+    <section id="overview" class="tab-panel">
+      <div class="grid cards">
+        <div class="stat"><span>Today's Sales</span><b id="salesTotal">₱0.00</b></div>
+        <div class="stat"><span>Sales Entries</span><b id="salesCount">0</b></div>
+        <div class="stat"><span>Present Today</span><b id="presentCount">0</b></div>
+        <div class="stat"><span>Today's Payroll</span><b id="payrollTotal">₱0.00</b></div>
+      </div>
+      <div class="card inner"><h2>Today's Attendance</h2><div id="overviewAttendance"></div></div>
+    </section>
+
+    <section id="employees" class="tab-panel hidden">
+      <div class="card inner">
+        <h2>Employee Management</h2>
+        <form id="employeeForm" class="form-grid">
+          <input id="empName" placeholder="Employee name" required>
+          <input id="empId" placeholder="Employee ID e.g. BG-001" required>
+          <select id="empType">
+            <option value="full">Full Time — ₱250/day</option>
+            <option value="semi">Semi Full Time — ₱200/day</option>
+            <option value="part">Part Time — ₱150/day</option>
+          </select>
+          <input id="empStart" type="time" value="08:00" required>
+          <button type="submit">ADD EMPLOYEE</button>
+        </form>
+        <div id="employeeTable"></div>
+      </div>
+
+      <div class="card inner">
+        <h2>Face Enrollment</h2>
+        <p class="muted">Select an employee, start the camera, then capture a clear front-facing face. This demo stores the face descriptor in this browser.</p>
+        <select id="enrollEmployee"></select>
+        <div class="camera-box admin-camera">
+          <video id="enrollCamera" autoplay muted playsinline></video>
+          <div class="face-frame"></div>
+          <div id="enrollStatus" class="camera-status">Camera not started</div>
+        </div>
+        <div class="button-row">
+          <button id="startEnrollCamera">START CAMERA</button>
+          <button id="enrollFace" disabled>ENROLL FACE</button>
+        </div>
+        <div id="enrollResult"></div>
+      </div>
+    </section>
+
+    <section id="attendance" class="tab-panel hidden">
+      <div class="card inner"><h2>DTR / Attendance</h2><div id="attendanceTable"></div></div>
+    </section>
+
+    <section id="sales" class="tab-panel hidden">
+      <div class="card inner">
+        <h2>Sales</h2>
+        <form id="salesForm" class="form-grid">
+          <select id="saleEmployee" required></select>
+          <input id="saleAmount" type="number" min="0" step=".01" placeholder="Sale amount ₱" required>
+          <input id="saleNote" placeholder="Service / note">
+          <button type="submit">ADD SALE</button>
+        </form>
+        <div id="salesTable"></div>
+      </div>
+    </section>
+
+    <section id="payroll" class="tab-panel hidden">
+      <div class="card inner">
+        <h2>Payroll</h2>
+        <p class="muted">Early/on-time = 40%, Late = 35%, AWOL = 30%. Daily base rate remains the minimum.</p>
+        <div id="payrollTable"></div>
+      </div>
+    </section>
+
+    <section id="reports" class="tab-panel hidden">
+      <div class="card inner">
+        <h2>Reports</h2>
+        <div class="report-controls">
+          <input id="reportDate" type="date">
+          <button onclick="makeReport('daily')">DAILY</button>
+          <button onclick="makeReport('monthly')">MONTHLY</button>
+          <button onclick="makeReport('yearly')">YEARLY</button>
+        </div>
+        <div id="reportOutput"></div>
+      </div>
+    </section>
+  </section>
+</main>
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

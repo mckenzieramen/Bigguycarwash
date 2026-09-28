@@ -1,113 +1,41 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Big Guy's Carwash — DTR</title>
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Big Guy's — Employee DTR</title>
+<link rel="stylesheet" href="styles.css">
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body>
-  <main class="shell">
-    <section id="loginView" class="card login-card">
-      <img src="assets/big-guys-logo.png" class="logo" alt="Big Guy's Carwash">
-      <h1>Employee DTR</h1>
-      <p class="muted">Log in before starting your workday.</p>
-      <label>Employee ID</label>
-      <input id="employeeId" placeholder="e.g. BG-001">
-      <button id="employeeLogin">Continue to Biometrics</button>
-      <p class="admin-link" id="showAdmin">Admin Login</p>
-    </section>
+<main class="dtr-shell">
+  <section class="card dtr-card">
+    <img src="assets/big-guys-logo.png" class="logo dtr-logo" alt="Big Guy's Carwash">
+    <div class="live-time" id="liveTime">--:--:--</div>
+    <div class="date" id="liveDate"></div>
+    <h1>Employee DTR</h1>
+    <p class="muted">Face recognition is required before clock-in.</p>
 
-    <section id="adminLoginView" class="card login-card hidden">
-      <img src="assets/big-guys-logo.png" class="logo" alt="Big Guy's Carwash">
-      <h1>Admin Login</h1>
-      <label>Email</label><input id="adminEmail" type="email" autocomplete="username">
-      <label>Password</label><input id="adminPassword" type="password" autocomplete="current-password">
-      <button id="adminLogin">Sign in</button>
-      <p class="admin-link" id="backLogin">Employee DTR</p>
-    </section>
+    <label>Employee ID</label>
+    <input id="employeeId" placeholder="e.g. BG-001" autocomplete="off">
 
-    <section id="bioView" class="card hidden">
-      <div class="topbar">
-        <div><strong id="bioEmployee"></strong><div class="muted">Biometric DTR</div></div>
-        <button class="ghost" id="cancelBio">Cancel</button>
-      </div>
-      <div class="camera-wrap"><video id="video" autoplay muted playsinline></video></div>
-      <p id="bioMessage" class="muted">Allow camera access, then position your face inside the frame.</p>
-      <button id="verifyFace">Verify Face & Clock In</button>
-      <p class="small">Prototype uses free browser-side face detection/recognition. Employee face enrollment is managed by Admin.</p>
-    </section>
+    <div class="camera-box">
+      <video id="camera" autoplay muted playsinline></video>
+      <div class="face-frame"></div>
+      <div id="cameraStatus" class="camera-status">Camera not started</div>
+    </div>
 
-    <section id="employeeHome" class="card hidden">
-      <img src="assets/big-guys-logo.png" class="mini-logo" alt="">
-      <div class="clock" id="clock"></div>
-      <div id="attendanceResult"></div>
-      <button id="clockOut" class="secondary">Clock Out</button>
-    </section>
+    <div class="button-row">
+      <button id="startCamera">START CAMERA</button>
+      <button id="clockIn" disabled>VERIFY & CLOCK IN</button>
+    </div>
 
-    <section id="adminView" class="hidden">
-      <header class="admin-header">
-        <div class="brand"><img src="assets/big-guys-logo.png" alt=""><span>Admin Dashboard</span></div>
-        <button class="ghost" id="adminLogout">Log out</button>
-      </header>
-      <nav class="tabs">
-        <button data-tab="overview" class="active">Overview</button>
-        <button data-tab="employees">Employees</button>
-        <button data-tab="sales">Sales</button>
-        <button data-tab="reports">Reports</button>
-      </nav>
+    <div id="result"></div>
 
-      <div id="overview" class="tab-panel">
-        <div class="grid cards">
-          <div class="stat"><span>Today Sales</span><b id="todaySales">₱0.00</b></div>
-          <div class="stat"><span>Present Today</span><b id="presentToday">0</b></div>
-          <div class="stat"><span>Payroll Today</span><b id="todayPayroll">₱0.00</b></div>
-          <div class="stat"><span>Employees</span><b id="employeeCount">0</b></div>
-        </div>
-        <div class="card inner"><h2>Today's DTR</h2><div id="todayTable"></div></div>
-      </div>
-
-      <div id="employees" class="tab-panel hidden">
-        <div class="card inner">
-          <h2>Employee Settings</h2>
-          <form id="employeeForm" class="form-grid">
-            <input id="empName" placeholder="Employee name" required>
-            <input id="empId" placeholder="Employee ID (BG-001)" required>
-            <select id="empType"><option value="full">Full Time — ₱250/day</option><option value="semi">Semi Full Time — ₱200/day</option><option value="part">Part Time — ₱150/day</option></select>
-            <input id="empStart" type="time" value="08:00" required>
-            <button type="submit">Save Employee</button>
-          </form>
-          <div id="employeeTable"></div>
-        </div>
-      </div>
-
-      <div id="sales" class="tab-panel hidden">
-        <div class="card inner">
-          <h2>Daily Sales</h2>
-          <form id="salesForm" class="form-grid">
-            <select id="saleEmployee" required></select>
-            <input id="saleAmount" type="number" min="0" step="0.01" placeholder="Sale amount ₱" required>
-            <input id="saleNote" placeholder="Service / note">
-            <button type="submit">Add Sale</button>
-          </form>
-          <div id="salesTable"></div>
-        </div>
-      </div>
-
-      <div id="reports" class="tab-panel hidden">
-        <div class="card inner">
-          <h2>Daily / Monthly / Yearly Tracker</h2>
-          <div class="report-controls">
-            <input id="reportDate" type="date">
-            <button id="dailyReport">Daily</button>
-            <button id="monthlyReport">Monthly</button>
-            <button id="yearlyReport">Yearly</button>
-          </div>
-          <div id="reportOutput"></div>
-        </div>
-      </div>
-    </section>
-  </main>
-  <script src="app.js"></script>
+    <p class="small">Your face descriptor is matched in the browser in this prototype. No paid biometric service is used.</p>
+    <a class="admin-link" href="./admin.html">Admin Login</a>
+  </section>
+</main>
+<script src="app.js"></script>
 </body>
 </html>
