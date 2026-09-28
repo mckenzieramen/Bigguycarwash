@@ -8,3 +8,4 @@
 .recognized strong{font-size:20px}
 .recognized span{color:#a9c7ff;margin-top:4px}
 @media(max-width:520px){.oval-camera,.oval-camera video{min-height:360px}.oval-frame{width:220px;height:290px}}
+.oval-frame{transition:border-color .15s ease,box-shadow .15s ease}.oval-red{border-color:#ff2d2d!important;box-shadow:0 0 24px #ff2d2d66!important}.oval-green{border-color:#24e36b!important;box-shadow:0 0 28px #24e36b88!important}.delete-employee{background:#8f1117;padding:8px 11px;font-size:12px}.delete-employee:hover{background:#c5161e}

@@ -17,7 +17,8 @@ function refresh(){
  $("payrollTotal").textContent=money(state.employees.reduce((t,e)=>t+pay(e,d),0));
  $("overviewAttendance").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);return[e.id,e.name,e.start,a?.clockIn||"—",a?.status||"AWOL",money(pay(e,d))]}),["ID","Employee","Scheduled","Clock In","Status","Pay"]);
  $("attendanceTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);return[e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",a?.status||"AWOL"]}),["ID","Employee","Scheduled","Clock In","Clock Out","Status"]);
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled"]),["ID","Name","Type","Start","Base/Day","Face"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
+ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join("");
  $("saleEmployee").innerHTML=opts;$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
@@ -52,4 +53,18 @@ $("salesForm").onsubmit=e=>{e.preventDefault();state.sales.push({date:today(),em
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 $("startEnrollCamera").onclick=async()=>{if(!await loadModels())return;try{enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720}},audio:false});$("enrollCamera").srcObject=enrollStream;$("enrollFace").disabled=false;$("enrollStatus").textContent="Camera ready — center the employee's face."}catch(e){$("enrollStatus").textContent="Camera permission denied or unavailable."}};
 $("enrollFace").onclick=async()=>{const id=$("enrollEmployee").value;if(!id)return;const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.5})).withFaceLandmarks(true).withFaceDescriptor();if(!d){$("enrollResult").innerHTML='<div class="result late-result">No clear face detected. Try again.</div>';return}state.faces[id]=Array.from(d.descriptor);save();$("enrollResult").innerHTML='<div class="result success">✓ Face enrolled successfully for this employee.</div>';refresh()};
+
+function deleteEmployee(id){
+ const employee=state.employees.find(e=>e.id===id);
+ if(!employee)return;
+ const ok=confirm(`Delete employee ${employee.name} (${employee.id})?\n\nThis will also delete the employee's enrolled face, attendance records, and sales records from this browser.`);
+ if(!ok)return;
+ state.employees=state.employees.filter(e=>e.id!==id);
+ state.attendance=state.attendance.filter(a=>a.employeeId!==id);
+ state.sales=state.sales.filter(s=>s.employeeId!==id);
+ delete state.faces[id];
+ save();
+ refresh();
+}
+
 function makeReport(mode){const d=$("reportDate").value||today(),prefix=mode==="yearly"?d.slice(0,4):mode==="monthly"?d.slice(0,7):d,m=x=>mode==="yearly"?x.date.startsWith(prefix):mode==="monthly"?x.date.startsWith(prefix):x.date===prefix,sales=state.sales.filter(m).reduce((t,x)=>t+x.amount,0);let payroll=0;[...new Set(state.attendance.filter(m).map(x=>x.date))].forEach(day=>state.employees.forEach(e=>payroll+=pay(e,day)));$("reportOutput").innerHTML=`<div class="report-box"><h3>${mode.toUpperCase()} REPORT</h3><p>Total Sales: <strong>${money(sales)}</strong></p><p>Total Payroll: <strong>${money(payroll)}</strong></p><p>Net before other expenses: <strong>${money(sales-payroll)}</strong></p></div>`}

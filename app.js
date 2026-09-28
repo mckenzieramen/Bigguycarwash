@@ -1,7 +1,7 @@
 const KEY="bigguys_dtr_v2";
 const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
-let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false;
+let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false;
 
 const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
@@ -16,10 +16,28 @@ function tick(){
 }
 setInterval(tick,1000); tick();
 
+function setOval(status){
+ const oval=$("ovalFrame");
+ oval.classList.remove("oval-red","oval-green");
+ if(status==="good") oval.classList.add("oval-green");
+ else if(status==="bad") oval.classList.add("oval-red");
+}
+
+function resetRecognition(message="Place your face inside the oval."){
+ recognizedEmployee=null;
+ validSince=0;
+ captureBusy=false;
+ $("cameraStatus").textContent=message;
+ $("recognized").classList.add("hidden");
+ $("timeIn").disabled=true;
+ $("timeOut").disabled=true;
+}
+
 async function loadModels(){
  if(modelsReady)return true;
  if(typeof faceapi==="undefined"){
    $("cameraStatus").textContent="Face recognition library did not load. Refresh the page.";
+   setOval("bad");
    return false;
  }
  $("cameraStatus").textContent="Loading face recognition…";
@@ -32,12 +50,14 @@ async function loadModels(){
      ]);
      modelsReady=true;
      $("cameraStatus").textContent="Camera ready — place your face inside the oval.";
+     setOval("bad");
      return true;
    }catch(err){
      console.warn("Face model source failed:",url,err);
    }
  }
  $("cameraStatus").textContent="Face recognition model could not load. Check your internet connection and refresh.";
+ setOval("bad");
  return false;
 }
 
@@ -50,10 +70,12 @@ async function startCamera(){
    });
    $("camera").srcObject=stream;
    $("cameraStatus").textContent="Camera ready — place your face inside the oval.";
+   setOval("bad");
    scanLoop();
  }catch(err){
    console.error(err);
    $("cameraStatus").textContent="Camera permission is required.";
+   setOval("bad");
  }
 }
 
@@ -66,6 +88,43 @@ function faceDistance(a,b){
  return Math.sqrt(sum);
 }
 
+// Checks whether the detected face is reasonably centered and sized for the oval.
+function faceIsInsideOval(detection){
+ const video=$("camera");
+ const w=video.videoWidth||720, h=video.videoHeight||720;
+ const box=detection.detection.box;
+ const cx=(box.x+box.width/2)/w;
+ const cy=(box.y+box.height/2)/h;
+ const rx=.20, ry=.36;
+ const ellipse=((cx-.5)*(cx-.5))/(rx*rx)+((cy-.50)*(cy-.50))/(ry*ry);
+ const faceHeight=box.height/h;
+ const faceWidth=box.width/w;
+ return ellipse<=1 && faceHeight>=.28 && faceHeight<=.78 && faceWidth>=.18 && faceWidth<=.70;
+}
+
+async function verifyFace(detection){
+ let best=null,bestDistance=Infinity;
+ for(const employee of state.employees){
+   const descriptor=state.faces[employee.id];
+   if(!descriptor)continue;
+   const d=faceDistance(Array.from(detection.descriptor),descriptor);
+   if(d<bestDistance){bestDistance=d;best=employee}
+ }
+ if(best && bestDistance<=.55){
+   recognizedEmployee=best;
+   $("cameraStatus").textContent="✓ Face recognized — ready for TIME IN / TIME OUT";
+   $("employeeName").textContent=best.name;
+   $("employeeId").textContent=best.id;
+   $("recognized").classList.remove("hidden");
+   $("timeIn").disabled=false;
+   $("timeOut").disabled=false;
+   setOval("good");
+ }else{
+   resetRecognition("Face captured, but employee is not enrolled.");
+   setOval("bad");
+ }
+}
+
 async function scanLoop(){
  if(scanning||!modelsReady)return;
  scanning=true;
@@ -76,42 +135,33 @@ async function scanLoop(){
    ).withFaceLandmarks(true).withFaceDescriptor();
 
    if(detection){
-     $("cameraStatus").textContent="Face detected — verifying employee…";
-     let best=null,bestDistance=Infinity;
-     for(const employee of state.employees){
-       const descriptor=state.faces[employee.id];
-       if(!descriptor)continue;
-       const d=faceDistance(Array.from(detection.descriptor),descriptor);
-       if(d<bestDistance){bestDistance=d;best=employee}
-     }
-
-     if(best && bestDistance<=.55){
-       recognizedEmployee=best;
-       $("cameraStatus").textContent="✓ Face recognized";
-       $("employeeName").textContent=best.name;
-       $("employeeId").textContent=best.id;
-       $("recognized").classList.remove("hidden");
-       $("timeIn").disabled=false;
-       $("timeOut").disabled=false;
+     if(faceIsInsideOval(detection)){
+       setOval("good");
+       if(!validSince) validSince=performance.now();
+       const heldMs=performance.now()-validSince;
+       if(heldMs>=800 && !captureBusy && !recognizedEmployee){
+         captureBusy=true;
+         $("cameraStatus").textContent="Capturing face…";
+         await verifyFace(detection);
+       }else if(!recognizedEmployee && !captureBusy){
+         const remaining=Math.max(0,800-heldMs);
+         $("cameraStatus").textContent=`Face position correct — capturing in ${(remaining/1000).toFixed(1)}s…`;
+       }
      }else{
-       recognizedEmployee=null;
-       $("cameraStatus").textContent="Face detected — not enrolled.";
-       $("recognized").classList.add("hidden");
-       $("timeIn").disabled=true;
-       $("timeOut").disabled=true;
+       validSince=0;
+       captureBusy=false;
+       setOval("bad");
+       resetRecognition("Move your face inside the red oval.");
      }
    }else{
-     recognizedEmployee=null;
-     $("cameraStatus").textContent="Place your face inside the oval.";
-     $("recognized").classList.add("hidden");
-     $("timeIn").disabled=true;
-     $("timeOut").disabled=true;
+     resetRecognition("Place your face inside the red oval.");
+     setOval("bad");
    }
  }catch(err){
    console.error("Face scan error:",err);
  }
  scanning=false;
- setTimeout(scanLoop,300);
+ setTimeout(scanLoop,150);
 }
 
 function record(type){
@@ -167,5 +217,4 @@ function record(type){
 $("timeIn").onclick=()=>record("in");
 $("timeOut").onclick=()=>record("out");
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
-
 window.addEventListener("load",startCamera);
