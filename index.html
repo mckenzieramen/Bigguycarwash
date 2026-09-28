@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Big Guy's — Employee DTR</title>
 <link rel="stylesheet" href="styles.css">
-<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body>
 <main class="dtr-shell">
@@ -14,21 +14,26 @@
 <div class="live-time" id="liveTime">--:--:--</div>
 <div class="date" id="liveDate"></div>
 <h1>Employee DTR</h1>
-<p class="muted">Face recognition will identify you automatically.</p>
+<p class="muted">Look at the camera. Your face will be recognized automatically.</p>
 
-<div class="camera-box">
-<video id="camera" autoplay muted playsinline></video>
-<div class="face-frame"></div>
-<div id="cameraStatus" class="camera-status">Starting camera…</div>
+<div class="camera-box oval-camera">
+  <video id="camera" autoplay muted playsinline></video>
+  <div class="oval-frame"></div>
+  <div id="cameraStatus" class="camera-status">Starting camera…</div>
+</div>
+
+<div id="recognized" class="recognized hidden">
+  <strong id="employeeName"></strong>
+  <span id="employeeId"></span>
 </div>
 
 <div class="button-row">
-<button id="timeIn" disabled>TIME IN</button>
-<button id="timeOut" disabled>TIME OUT</button>
+  <button id="timeIn" disabled>TIME IN</button>
+  <button id="timeOut" disabled>TIME OUT</button>
 </div>
 
 <div id="result"></div>
-<p class="small">No employee ID is required. Face recognition automatically finds the enrolled employee and records the current time.</p>
+<p class="small">No employee ID and no Start Camera button are required. The camera starts automatically.</p>
 <a class="admin-link" href="./admin.html">Admin Login</a>
 </section>
 </main>
