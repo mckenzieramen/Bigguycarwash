@@ -6,133 +6,100 @@
 <title>Big Guy's — Admin Dashboard</title>
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-<main class="shell">
-  <section id="adminLogin" class="card login-card">
-    <img src="assets/big-guys-logo.png" class="logo" alt="Big Guy's Carwash">
-    <h1>Admin Login</h1>
-    <p class="muted">Big Guy's Carwash & Detailing Services</p>
-    <label>Email</label>
-    <input id="adminEmail" type="email" placeholder="Admin email">
-    <label>Password</label>
-    <input id="adminPassword" type="password" placeholder="Password">
-    <button id="loginBtn">LOGIN</button>
-    <p id="loginError" class="error"></p>
-    <a class="admin-link" href="./">Employee DTR</a>
-  </section>
-
-  <section id="dashboard" class="hidden">
-    <header class="admin-header">
-      <div class="brand">
-        <img src="assets/big-guys-logo.png" alt="">
-        <div><strong>ADMIN DASHBOARD</strong><small>Big Guy's Carwash & Detailing Services</small></div>
+<body class="admin-body">
+<div class="admin-app">
+  <aside class="admin-sidebar" id="adminSidebar">
+    <div class="sidebar-brand">
+      <img src="assets/big-guys-logo.png" alt="Big Guy's Carwash">
+    </div>
+    <nav class="sidebar-nav" aria-label="Admin navigation">
+      <button class="side-nav active" data-tab="overview"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
+      <button class="side-nav" data-tab="employees"><span class="nav-icon">♙</span><span>Employees</span></button>
+      <button class="side-nav" data-tab="attendance"><span class="nav-icon">◷</span><span>DTR / Attendance</span></button>
+      <button class="side-nav sales-parent" data-tab="sales" id="salesNav"><span class="nav-icon">▣</span><span>Sales</span><span class="nav-chevron">⌄</span></button>
+      <div class="sales-subnav" id="salesSubnav">
+        <button type="button" data-report-mode="daily">Daily Report</button>
+        <button type="button" data-report-mode="monthly">Monthly Report</button>
+        <button type="button" data-report-mode="yearly">Yearly Report</button>
       </div>
-      <button class="ghost" id="logoutBtn">LOGOUT</button>
+      <button class="side-nav" data-tab="payroll"><span class="nav-icon">＄</span><span>Payroll</span></button>
+      <button class="side-nav" data-tab="reports"><span class="nav-icon">▤</span><span>Reports</span><span class="nav-chevron">⌄</span></button>
+      <button class="side-nav" data-tab="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
+    </nav>
+    <button class="side-nav logout-nav" id="logoutBtn"><span class="nav-icon">↪</span><span>Logout</span></button>
+    <div class="sidebar-profile">
+      <div class="profile-avatar">●</div>
+      <div><strong>bigguy@admin.com</strong><small>Administrator</small></div>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <header class="dashboard-header">
+      <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
+      <div>
+        <h1>Admin Dashboard</h1>
+        <p>Big Guy's Carwash and Detailing Services</p>
+      </div>
+      <div class="header-date"><span class="calendar-icon">▣</span><div><strong id="headerDay">Monday</strong><span id="headerDate">September 28, 2026</span></div></div>
     </header>
 
-    <nav class="tabs">
-      <button class="active" data-tab="overview">Dashboard</button>
-      <button data-tab="employees">Employees</button>
-      <button data-tab="attendance">DTR / Attendance</button>
-      <button data-tab="sales">Sales</button>
-      <button data-tab="payroll">Payroll</button>
-      <button data-tab="reports">Reports</button>
-    </nav>
-
-    <section id="overview" class="tab-panel">
-      <div class="grid cards">
-        <div class="stat"><span>Today's Sales</span><b id="salesTotal">₱0.00</b></div>
-        <div class="stat"><span>Sales Entries</span><b id="salesCount">0</b></div>
-        <div class="stat"><span>Present Today</span><b id="presentCount">0</b></div>
-        <div class="stat"><span>Today's Payroll</span><b id="payrollTotal">₱0.00</b></div>
-      </div>
-      <div class="card inner"><h2>Today's Attendance</h2><div id="overviewAttendance"></div></div>
+    <section id="adminLogin" class="card login-card">
+      <img src="assets/big-guys-logo.png" class="logo" alt="Big Guy's Carwash">
+      <h1>Admin Login</h1>
+      <p class="muted">Big Guy's Carwash &amp; Detailing Services</p>
+      <label>Email</label><input id="adminEmail" type="email" placeholder="Admin email">
+      <label>Password</label><input id="adminPassword" type="password" placeholder="Password">
+      <button id="loginBtn">LOGIN</button><p id="loginError" class="error"></p>
+      <a class="admin-link" href="./">Employee DTR</a>
     </section>
 
-    <section id="employees" class="tab-panel hidden">
-      <div class="card inner">
-        <h2>Employee Management</h2>
-        <form id="employeeForm" class="form-grid">
-          <input id="empName" placeholder="Employee name" required>
-          <input id="empId" placeholder="Employee ID e.g. BG-001" required>
-          <select id="empType">
-            <option value="full">Full Time — ₱250/day</option>
-            <option value="semi">Semi Full Time — ₱200/day</option>
-            <option value="part">Part Time — ₱150/day</option>
-          </select>
-          <input id="empStart" type="time" value="08:00" required>
-          <button type="submit">ADD EMPLOYEE</button>
-        </form>
-        <div id="employeeTable"></div>
-      </div>
-
-      <div class="card inner">
-        <h2>Face Enrollment</h2>
-        <p class="muted">Select an employee, start the camera, then press ENROLL FACE. The system will automatically collect multiple clear face samples. The Employee DTR will then continuously scan and recognize the enrolled employee.</p>
-        <select id="enrollEmployee"></select>
-        <div class="camera-box admin-camera">
-          <video id="enrollCamera" autoplay muted playsinline></video>
-          <div class="face-frame"></div>
-          <div id="enrollStatus" class="camera-status">Camera not started</div>
-        </div>
-        <div class="button-row">
-          <button id="startEnrollCamera">START CAMERA</button>
-          <button id="enrollFace" disabled>ENROLL FACE</button>
-        </div>
-        <div id="enrollResult"></div>
-      </div>
-    </section>
-
-    <section id="attendance" class="tab-panel hidden">
-      <div class="card inner"><h2>DTR / Attendance</h2><div id="attendanceTable"></div></div>
-    </section>
-
-    <section id="sales" class="tab-panel hidden">
-      <div class="card inner">
-        <h2>Sales</h2>
-        <form id="salesForm" class="form-grid">
-          <select id="saleEmployee" required></select>
-          <input id="saleAmount" type="number" min="0" step=".01" placeholder="Sale amount ₱" required>
-          <input id="saleNote" placeholder="Service / note">
-          <button type="submit">ADD SALE</button>
-        </form>
-        <div id="salesTable"></div>
-      </div>
-    </section>
-
-    <section id="payroll" class="tab-panel hidden">
-      <div class="card inner">
-        <h2>Payroll</h2>
-        <p class="muted">Early/on-time = 40%, Late = 35%, AWOL = 30%. Daily base rate remains the minimum.</p>
-        <div id="payrollTable"></div>
-      </div>
-    </section>
-
-    <section id="reports" class="tab-panel hidden">
-      <div class="card inner">
-        <h2>Sales Reports</h2>
-        <div class="report-controls">
-          <input id="reportDate" type="date">
-          <button onclick="makeReport('daily')">DAILY</button>
-          <button onclick="makeReport('monthly')">MONTHLY</button>
-          <button onclick="makeReport('yearly')">YEARLY</button>
-        </div>
-
-        <div class="daily-reconciliation">
-          <h3>Daily Cash Reconciliation</h3>
-          <p class="muted">Total Sale is calculated automatically from the Sales entries for the selected date. Enter the Cash, Expenses, and actual Cash Remitted to calculate Short/Over.</p>
-          <div class="reconciliation-grid">
-            <div><label>Cash</label><input id="reportCash" type="number" min="0" step=".01" placeholder="₱0.00"></div>
-            <div><label>Expenses</label><input id="reportExpenses" type="number" min="0" step=".01" placeholder="₱0.00"></div>
-            <div><label>Cash Remitted</label><input id="reportCashRemitted" type="number" min="0" step=".01" placeholder="₱0.00"></div>
-            <div class="reconciliation-action"><label>&nbsp;</label><button id="saveDailyReport">SAVE DAILY REPORT</button></div>
+    <section id="dashboard" class="hidden dashboard-layout">
+      <div class="dashboard-center">
+        <section id="overview" class="tab-panel">
+          <div class="kpi-grid">
+            <div class="kpi-card kpi-blue"><div class="kpi-icon">▣</div><div><span>Total Sales</span><b id="salesTotal">₱0.00</b><small>Today</small></div></div>
+            <div class="kpi-card kpi-green"><div class="kpi-icon">♟</div><div><span>Cars Washed</span><b id="carsWashed">0</b><small>Today</small></div></div>
+            <div class="kpi-card kpi-gold"><div class="kpi-icon">♙</div><div><span>Employees</span><b id="employeeTotal">0</b><small>Active</small></div></div>
+            <div class="kpi-card kpi-purple"><div class="kpi-icon">＄</div><div><span>Total Payroll</span><b id="payrollTotal">₱0.00</b><small>Today (Est.)</small></div></div>
           </div>
-        </div>
-        <div id="reportOutput"></div>
+
+          <div class="chart-grid">
+            <div class="dashboard-card chart-card"><div class="card-heading"><h2>Sales Overview</h2><select id="salesChartPeriod"><option value="week">This Week</option><option value="today">Today</option><option value="month">This Month</option><option value="year">This Year</option></select></div><div id="salesChart" class="sales-chart"></div></div>
+            <div class="dashboard-card chart-card"><div class="card-heading"><h2>Carwash Count</h2><select id="carwashChartPeriod"><option value="week">This Week</option><option value="today">Today</option><option value="month">This Month</option><option value="year">This Year</option></select></div><div id="carwashChart" class="line-chart"></div></div>
+            <div class="dashboard-card income-card"><div class="card-heading"><h2>Income Breakdown</h2></div><div class="donut-wrap"><div class="donut" id="incomeDonut"><div><b id="incomeTotal">₱0.00</b><span>Total Sales</span></div></div></div><div class="legend"><span><i class="dot blue"></i>Carwash Services <b id="incomeCarwash">0%</b></span><span><i class="dot gold"></i>Detailing <b id="incomeDetailing">0%</b></span><span><i class="dot neutral"></i>Add-ons <b id="incomeAddons">0%</b></span></div></div>
+          </div>
+
+          <div class="dashboard-card attendance-card"><div class="card-heading"><h2>Today's Attendance</h2><button class="small-action" data-tab-target="attendance">View All</button></div><div id="overviewAttendance"></div></div>
+
+          <div class="summary-grid">
+            <div class="dashboard-card"><div class="card-heading"><h2>Top Sales Today</h2></div><div id="topSalesToday"></div></div>
+            <div class="dashboard-card"><div class="card-heading"><h2>Employee Type Summary</h2></div><div id="employeeTypeSummary"></div></div>
+            <div class="dashboard-card recent-sales-card"><div class="card-heading"><h2>Recent Sales</h2></div><div id="recentSales"></div></div>
+          </div>
+        </section>
+
+        <section id="employees" class="tab-panel hidden">
+          <div class="card inner"><h2>Employee Management</h2><form id="employeeForm" class="form-grid"><input id="empName" placeholder="Employee name" required><input id="empId" placeholder="Employee ID e.g. BG-001" required><select id="empType"><option value="full">Full Time — ₱250/day</option><option value="semi">Semi Full Time — ₱200/day</option><option value="part">Part Time — ₱150/day</option></select><input id="empStart" type="time" value="08:00" required><button type="submit">ADD EMPLOYEE</button></form><div id="employeeTable"></div></div>
+          <div class="card inner"><h2>Face Enrollment</h2><p class="muted">Select an employee, start the camera, then press ENROLL FACE. The system will automatically collect multiple clear face samples. The Employee DTR will then continuously scan and recognize the enrolled employee.</p><select id="enrollEmployee"></select><div class="camera-box admin-camera"><video id="enrollCamera" autoplay muted playsinline></video><div class="face-frame"></div><div id="enrollStatus" class="camera-status">Camera not started</div></div><div class="button-row"><button id="startEnrollCamera">START CAMERA</button><button id="enrollFace" disabled>ENROLL FACE</button></div><div id="enrollResult"></div></div>
+        </section>
+        <section id="attendance" class="tab-panel hidden"><div class="card inner"><h2>DTR / Attendance</h2><div id="attendanceTable"></div></div></section>
+        <section id="sales" class="tab-panel hidden"><div class="card inner"><h2>Sales</h2><form id="salesForm" class="form-grid"><select id="saleEmployee" required></select><input id="saleAmount" type="number" min="0" step=".01" placeholder="Sale amount ₱" required><input id="saleNote" placeholder="Service / note"><button type="submit">ADD SALE</button></form><div id="salesTable"></div></div></section>
+        <section id="payroll" class="tab-panel hidden"><div class="card inner"><h2>Payroll</h2><p class="muted">Early/on-time = 40%, Late = 35%, AWOL = 30%. Daily base rate remains the minimum.</p><div id="payrollTable"></div></div></section>
+        <section id="reports" class="tab-panel hidden"><div class="card inner"><h2>Sales Reports</h2><div class="report-controls"><input id="reportDate" type="date"><button onclick="makeReport('daily')">DAILY</button><button onclick="makeReport('monthly')">MONTHLY</button><button onclick="makeReport('yearly')">YEARLY</button></div><div class="daily-reconciliation"><h3>Daily Cash Reconciliation</h3><p class="muted">Total Sale is calculated automatically from the Sales entries for the selected date. Enter the Cash, Expenses, and actual Cash Remitted to calculate Short/Over.</p><div class="reconciliation-grid"><div><label>Cash</label><input id="reportCash" type="number" min="0" step=".01" placeholder="₱0.00"></div><div><label>Expenses</label><input id="reportExpenses" type="number" min="0" step=".01" placeholder="₱0.00"></div><div><label>Cash Remitted</label><input id="reportCashRemitted" type="number" min="0" step=".01" placeholder="₱0.00"></div><div class="reconciliation-action"><label>&nbsp;</label><button id="saveDailyReport">SAVE DAILY REPORT</button></div></div></div><div id="reportOutput"></div></div></section>
+        <section id="settings" class="tab-panel hidden"><div class="card inner"><h2>Settings</h2><p class="muted">Administrator configuration area.</p></div></section>
       </div>
+
+      <aside class="dashboard-right">
+        <div class="right-brand"><img src="assets/big-guys-logo.png" alt="Big Guy's"></div>
+        <div class="digital-clock" id="digitalClock">7:45:22 AM</div>
+        <div class="right-date" id="rightDate">Monday, September 28, 2026</div>
+        <div class="status-visual"><div class="status-orb">✓</div><h3 id="rightStatusTitle">Ready for Attendance</h3><p id="rightStatusText">Select an employee from DTR / Attendance to view the latest status.</p></div>
+        <div class="employee-status-card"><div><span>Employee ID</span><b id="rightEmployeeId">—</b></div><div><span>Type</span><b id="rightEmployeeType">—</b></div><div><span>Schedule</span><b id="rightSchedule">—</b></div><div><span>Clock In</span><b id="rightClockIn">—</b></div></div>
+        <div class="status-notice"><div class="notice-icon">✓</div><div><strong id="rightNoticeTitle">Attendance Status</strong><p id="rightNoticeText">No attendance action recorded yet.</p></div></div>
+      </aside>
     </section>
-  </section>
-</main>
+  </main>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="admin.js"></script>
 </body>
