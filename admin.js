@@ -128,15 +128,19 @@ function averageDescriptor(samples){
  return avg;
 }
 function enrollmentFaceIsInsideOval(d){
- const video=$("enrollCamera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
- const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
- const rx=.23,ry=.40;
- const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
- const faceHeight=box.height/h,faceWidth=box.width/w;
- return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
+ const video=$("enrollCamera"),box=d.detection.box;
+ const vw=video.videoWidth||720,vh=video.videoHeight||720;
+ const rect=video.getBoundingClientRect(),dw=rect.width||video.clientWidth||700,dh=rect.height||video.clientHeight||430;
+ const scale=Math.max(dw/vw,dh/vh),rw=vw*scale,rh=vh*scale,ox=(dw-rw)/2,oy=(dh-rh)/2;
+ const cx=(box.x+box.width/2)*scale+ox,cy=(box.y+box.height/2)*scale+oy;
+ const nx=cx/dw,ny=cy/dh,rx=.285,ry=.455;
+ const ellipse=((nx-.5)**2)/(rx**2)+((ny-.50)**2)/(ry**2);
+ const faceHeight=(box.height*scale)/dh,faceWidth=(box.width*scale)/dw;
+ // The oval is the guide. Allow smaller faces so mobile enrollment works from farther away.
+ return ellipse<=1&&faceHeight>=.075&&faceHeight<=.90&&faceWidth>=.045&&faceWidth<=.82;
 }
 async function captureEnrollmentSample(id){
- const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
+ const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)?320:416,scoreThreshold:/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)?.25:.40})).withFaceLandmarks(true).withFaceDescriptor();
  if(!d)return false;
  const good=enrollmentFaceIsInsideOval(d);
  const frame=$("enrollOvalFrame");
@@ -171,7 +175,26 @@ async function runAutoEnrollment(){
  }
  enrollmentRunning=false;$("enrollFace").disabled=false;
 }
-$("startEnrollCamera").onclick=async()=>{if(!await loadModels())return;try{enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});$("enrollCamera").srcObject=enrollStream;$('enrollFace').disabled=false;$('enrollStatus').textContent="Camera ready — press ENROLL FACE to begin automatic multi-sample capture."}catch(e){$('enrollStatus').textContent="Camera permission denied or unavailable."}};
+$("startEnrollCamera").onclick=async()=>{
+ if(!await loadModels())return;
+ try{
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error("getUserMedia unavailable");
+  const mobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const attempts=[
+   {facingMode:{ideal:"user"},width:{ideal:mobile?480:720},height:{ideal:mobile?640:720}},
+   {facingMode:"user",width:{ideal:480},height:{ideal:640}},
+   {facingMode:"user"}
+  ];
+  let lastErr;
+  for(const constraints of attempts){try{enrollStream=await navigator.mediaDevices.getUserMedia({video:constraints,audio:false});break}catch(err){lastErr=err;enrollStream=null;}}
+  if(!enrollStream)throw lastErr||new Error("Camera unavailable");
+  const videoEl=$("enrollCamera");videoEl.srcObject=enrollStream;videoEl.muted=true;videoEl.setAttribute("playsinline","");
+  await new Promise(resolve=>{if(videoEl.readyState>=2)return resolve();videoEl.onloadedmetadata=()=>resolve();setTimeout(resolve,1500)});
+  await videoEl.play().catch(()=>{});
+  $("enrollFace").disabled=false;
+  $("enrollStatus").textContent="Camera ready — press ENROLL FACE to begin automatic multi-sample capture.";
+ }catch(e){console.error(e);$("enrollStatus").textContent="Camera permission denied or unavailable. Allow camera access and try again."}
+};
 $("enrollFace").onclick=runAutoEnrollment;
 
 function showEmployeeHistory(id){

@@ -5,7 +5,7 @@ let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, val
 const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
 const LAST_CAPTURE_KEY="bigguys_last_face_capture";
-const CAPTURE_HOLD_MS=500;
+const CAPTURE_HOLD_MS=350;
 let attendanceCooldownUntil=0;
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const timeNow=()=>new Date().toTimeString().slice(0,5);
@@ -23,7 +23,22 @@ async function loadModels(){
 }
 async function startCamera(){
  if(!await loadModels())return;
- try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});$("camera").srcObject=stream;$("cameraStatus").textContent="Scanning live — place one face inside the red oval.";setOval("bad");scanLoop()}catch(err){console.error(err);$("cameraStatus").textContent="Camera permission is required.";setOval("bad")}
+ try{
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error("getUserMedia unavailable");
+  const mobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const attempts=[
+   {facingMode:{ideal:"user"},width:{ideal:mobile?480:720},height:{ideal:mobile?640:720}},
+   {facingMode:"user",width:{ideal:480},height:{ideal:640}},
+   {facingMode:"user"}
+  ];
+  let lastErr;
+  for(const constraints of attempts){try{stream=await navigator.mediaDevices.getUserMedia({video:constraints,audio:false});break}catch(err){lastErr=err;stream=null;}}
+  if(!stream)throw lastErr||new Error("Camera unavailable");
+  const videoEl=$("camera");videoEl.srcObject=stream;videoEl.muted=true;videoEl.setAttribute("playsinline","");
+  await new Promise(resolve=>{if(videoEl.readyState>=2)return resolve();videoEl.onloadedmetadata=()=>resolve();setTimeout(resolve,1500)});
+  await videoEl.play().catch(()=>{});
+  $("cameraStatus").textContent="Scanning live — place one face inside the red oval.";setOval("bad");scanLoop();
+ }catch(err){console.error(err);$("cameraStatus").textContent="Camera permission is required. Tap Allow for camera access and refresh.";setOval("bad")}
 }
 function normalizeFaceRecords(value){
  if(!value)return [];
@@ -33,11 +48,17 @@ function normalizeFaceRecords(value){
 }
 function faceDistance(a,b){let sum=0;for(let i=0;i<a.length;i++){const d=a[i]-b[i];sum+=d*d}return Math.sqrt(sum)}
 function faceIsInsideOval(d){
- const video=$("camera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
- const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
- const rx=.23,ry=.40,ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
- const faceHeight=box.height/h,faceWidth=box.width/w;
- return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
+ const video=$("camera"),box=d.detection.box;
+ const vw=video.videoWidth||720,vh=video.videoHeight||720;
+ const rect=video.getBoundingClientRect(),dw=rect.width||video.clientWidth||720,dh=rect.height||video.clientHeight||430;
+ const scale=Math.max(dw/vw,dh/vh),rw=vw*scale,rh=vh*scale,ox=(dw-rw)/2,oy=(dh-rh)/2;
+ const cx=(box.x+box.width/2)*scale+ox,cy=(box.y+box.height/2)*scale+oy;
+ const nx=cx/dw,ny=cy/dh,rx=.285,ry=.455;
+ const ellipse=((nx-.5)**2)/(rx**2)+((ny-.50)**2)/(ry**2);
+ const faceHeight=(box.height*scale)/dh,faceWidth=(box.width*scale)/dw;
+ // Mobile users can stand farther away. The oval itself is the guide; require only a
+ // small detectable face and its center inside the oval rather than forcing a large face size.
+ return ellipse<=1&&faceHeight>=.075&&faceHeight<=.90&&faceWidth>=.045&&faceWidth<=.82;
 }
 function bestEmployee(descriptor){
  let best=null,bestDistance=Infinity;
@@ -58,7 +79,9 @@ function saveFaceSnapshot(employee,detection){
   const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy),canvas=document.createElement("canvas");
   canvas.width=360;canvas.height=Math.max(420,Math.round(360*sh/sw));
   const ctx=canvas.getContext("2d");ctx.save();ctx.translate(canvas.width,0);ctx.scale(-1,1);ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);ctx.restore();
-  localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify({employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.88),capturedAt:new Date().toISOString()}));
+  const capturedAt=new Date().toISOString();
+  localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify({employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.88),capturedAt}));
+  setTimeout(()=>{try{const current=JSON.parse(localStorage.getItem(LAST_CAPTURE_KEY)||"null");if(current?.capturedAt===capturedAt)localStorage.removeItem(LAST_CAPTURE_KEY)}catch(e){}},1000);
  }catch(err){console.warn("Could not save face snapshot",err)}
 }
 async function verifyFace(detection){
@@ -80,7 +103,8 @@ async function scanLoop(){
     $("cameraStatus").textContent="🔴 Ready — place the next face inside the oval.";
     return;
   }
-  const detection=await faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
+  const mobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const detection=await faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:mobile?320:416,scoreThreshold:mobile?.25:.40})).withFaceLandmarks(true).withFaceDescriptor();
   if(detection){
    if(faceIsInsideOval(detection)){
     setOval("good");
