@@ -19,4 +19,11 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 @media(max-width:700px){.dashboard-header h1{font-size:25px}.dashboard-header p{font-size:13px}.header-date{display:none}.kpi-grid,.chart-grid,.summary-grid{grid-template-columns:1fr}.income-card,.summary-grid .recent-sales-card{grid-column:auto}.form-grid{grid-template-columns:1fr}.reconciliation-grid{grid-template-columns:1fr 1fr}.digital-clock{font-size:34px}.status-visual{height:240px;margin-left:8px;margin-right:8px}.right-brand{height:120px}.right-brand img{width:230px}}
 @media(max-width:480px){.admin-main{padding:12px 8px}.login-card{margin:35px 8px;padding:20px}.kpi-card b{font-size:21px}.reconciliation-grid{grid-template-columns:1fr}.table{min-width:650px}.attendance-card,.summary-grid .dashboard-card,.chart-card,.income-card{overflow-x:auto}.sidebar-brand{height:145px}.sidebar-brand img{width:190px}}
 
-.history-employee{background:#0b6fdc;padding:8px 10px;font-size:12px;margin-right:5px}.history-employee:hover{background:#1687ff}.employee-history{margin-top:16px;padding:16px;border:1px solid #173149;border-radius:14px;background:linear-gradient(145deg,#071625f2,#06111cf2);box-shadow:0 12px 35px #0006}.employee-history.hidden{display:none}.history-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.history-head h3{margin:0;font-size:18px}.history-head button{padding:8px 12px;border-radius:8px;background:#172b3e;color:#fff}.employee-history .table{overflow:auto;display:block}.employee-history .table thead,.employee-history .table tbody{width:100%}
+/* Employee DTR history panel */
+.employee-history{margin-top:18px;padding:18px;border:1px solid rgba(80,150,220,.22);border-radius:16px;background:rgba(7,20,34,.72);box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.history-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.history-head h3{margin:0 0 4px}
+.history-head button{border:1px solid rgba(100,170,255,.35);background:#0b2340;color:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
+.history-head button:hover{background:#123b68}
+.history-employee{border:1px solid rgba(70,160,255,.35);background:#09284a;color:#fff;border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:5px}
+.history-employee:hover{background:#0d4f8d}

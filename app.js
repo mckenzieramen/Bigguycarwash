@@ -1,12 +1,12 @@
 const KEY="bigguys_dtr_v2";
 const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
-let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{},"faceSnapshots":{}}');
-let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false, attendanceCooldownUntil=0;
-const LAST_CAPTURE_KEY="bigguys_last_face_capture";
-const CAPTURE_HOLD_MS=500;
-if(!state.faceSnapshots||typeof state.faceSnapshots!=="object")state.faceSnapshots={};
+let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
+let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false;
 const $=id=>document.getElementById(id);
 const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
+const LAST_CAPTURE_KEY="bigguys_last_face_capture";
+const CAPTURE_HOLD_MS=500;
+let attendanceCooldownUntil=0;
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const timeNow=()=>new Date().toTimeString().slice(0,5);
 const minutes=t=>{const [h,m]=t.split(":").map(Number);return h*60+m};
@@ -33,23 +33,11 @@ function normalizeFaceRecords(value){
 }
 function faceDistance(a,b){let sum=0;for(let i=0;i<a.length;i++){const d=a[i]-b[i];sum+=d*d}return Math.sqrt(sum)}
 function faceIsInsideOval(d){
- const video=$("camera"),box=d.detection.box;
- const vw=video.videoWidth||720,vh=video.videoHeight||720;
- const cw=video.clientWidth||video.parentElement?.clientWidth||vw,ch=video.clientHeight||430;
- // The camera uses object-fit: cover, so compare the detected face against
- // the oval in the actual displayed/cropped video coordinates, not the raw frame.
- const scale=Math.max(cw/vw,ch/vh);
- const rw=vw*scale,rh=vh*scale;
- const ox=(cw-rw)/2,oy=(ch-rh)/2;
- const fx=(box.x+box.width/2)*scale+ox;
- const fy=(box.y+box.height/2)*scale+oy;
- const fw=box.width*scale,fh=box.height*scale;
- const cx=fx/cw,cy=fy/ch;
- // Slightly generous oval so normal camera movement does not block capture.
- const rx=.29,ry=.43;
- const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
- const faceHeight=fh/ch,faceWidth=fw/cw;
- return ellipse<=1&&faceHeight>=.18&&faceHeight<=.86&&faceWidth>=.11&&faceWidth<=.78;
+ const video=$("camera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
+ const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
+ const rx=.23,ry=.40,ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
+ const faceHeight=box.height/h,faceWidth=box.width/w;
+ return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
 }
 function bestEmployee(descriptor){
  let best=null,bestDistance=Infinity;
@@ -59,36 +47,25 @@ function bestEmployee(descriptor){
  }
  return {employee:best,distance:bestDistance};
 }
-function captureDisplayedOval(video,ovalEl){
+function saveFaceSnapshot(employee,detection){
  try{
-  const vr=video.getBoundingClientRect(),or=ovalEl.getBoundingClientRect();
-  const vw=video.videoWidth||720,vh=video.videoHeight||720;
-  const dw=vr.width||video.clientWidth||720,dh=vr.height||video.clientHeight||430;
-  const scale=Math.max(dw/vw,dh/vh);
-  const rw=vw*scale,rh=vh*scale,ox=(dw-rw)/2,oy=(dh-rh)/2;
+  const video=$("camera"),oval=$("ovalFrame");
+  const vr=video.getBoundingClientRect(),or=oval.getBoundingClientRect();
+  const vw=video.videoWidth||720,vh=video.videoHeight||720,dw=vr.width||video.clientWidth||720,dh=vr.height||video.clientHeight||430;
+  const scale=Math.max(dw/vw,dh/vh),rw=vw*scale,rh=vh*scale,ox=(dw-rw)/2,oy=(dh-rh)/2;
   const x=or.left-vr.left,y=or.top-vr.top,w=or.width,h=or.height;
-  const sx=Math.max(0,(x-ox)/scale),sy=Math.max(0,(y-oy)/scale);
-  const ex=Math.min(vw,(x+w-ox)/scale),ey=Math.min(vh,(y+h-oy)/scale);
-  const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy);
-  const canvas=document.createElement("canvas");canvas.width=360;canvas.height=Math.max(420,Math.round(360*sh/sw));
+  const sx=Math.max(0,(x-ox)/scale),sy=Math.max(0,(y-oy)/scale),ex=Math.min(vw,(x+w-ox)/scale),ey=Math.min(vh,(y+h-oy)/scale);
+  const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy),canvas=document.createElement("canvas");
+  canvas.width=360;canvas.height=Math.max(420,Math.round(360*sh/sw));
   const ctx=canvas.getContext("2d");ctx.save();ctx.translate(canvas.width,0);ctx.scale(-1,1);ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);ctx.restore();
-  return canvas.toDataURL("image/jpeg",.88);
- }catch(err){console.warn("Could not capture displayed oval",err);return ""}
-}
-function saveFaceSnapshot(employee){
- try{
-  const dataUrl=captureDisplayedOval($("camera"),$("ovalFrame"));
-  if(!dataUrl)return;
-  localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify({employeeId:employee.id,name:employee.name,dataUrl,capturedAt:new Date().toISOString()}));
+  localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify({employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.88),capturedAt:new Date().toISOString()}));
  }catch(err){console.warn("Could not save face snapshot",err)}
 }
-
 async function verifyFace(detection){
  const match=bestEmployee(detection.descriptor);
- // Slightly more tolerant than the old single-sample matcher, while still requiring a real enrolled match.
  if(match.employee&&match.distance<=.60){
    recognizedEmployee=match.employee;
-   saveFaceSnapshot(match.employee);
+   saveFaceSnapshot(match.employee,detection);
    $("cameraStatus").textContent=`✓ ${match.employee.name} recognized — choose TIME IN or TIME OUT`;
    $("employeeName").textContent=match.employee.name;$("employeeId").textContent=match.employee.id;$("recognized").classList.remove("hidden");$("timeIn").disabled=false;$("timeOut").disabled=false;setOval("good");
  }else{resetRecognition(match.employee?`Face detected, but match is not strong enough (${match.distance.toFixed(2)}). Look straight at the camera.`:"Face captured, but this employee is not enrolled.");setOval("bad")}
@@ -110,24 +87,36 @@ async function scanLoop(){
     if(!recognizedEmployee){
       if(!validSince)validSince=performance.now();
       const held=performance.now()-validSince;
-      if(held>=CAPTURE_HOLD_MS&&!captureBusy){captureBusy=true;$("cameraStatus").textContent="✓ Face position correct — capturing and verifying…";await verifyFace(detection)}
-      else if(!captureBusy){$("cameraStatus").textContent=`✓ Face position correct — automatic capture in ${Math.max(0,(CAPTURE_HOLD_MS-held)/1000).toFixed(1)}s`}
+      if(held>=CAPTURE_HOLD_MS&&!captureBusy){
+        captureBusy=true;
+        $("cameraStatus").textContent="✓ Face position correct — capturing and verifying…";
+        await verifyFace(detection);
+      }else if(!captureBusy){
+        $("cameraStatus").textContent=`✓ Face position correct — automatic capture in ${Math.max(0,(CAPTURE_HOLD_MS-held)/1000).toFixed(1)}s`;
+      }
     }
-   }else{validSince=0;captureBusy=false;if(!recognizedEmployee){setOval("bad");$("cameraStatus").textContent="🔴 Keep your face centered inside the red oval."}}
-  }else{if(!recognizedEmployee){validSince=0;captureBusy=false;setOval("bad");$("cameraStatus").textContent="🔴 No clear face detected — place your face inside the oval."}}
- }catch(err){console.error("Face scan error:",err);if(!recognizedEmployee){setOval("bad");$("cameraStatus").textContent="Face scan is retrying…"}}
- finally{scanning=false;setTimeout(scanLoop,120)}
+   }else{
+    validSince=0;captureBusy=false;
+    if(!recognizedEmployee){setOval("bad");$("cameraStatus").textContent="🔴 Keep your face centered inside the red oval."}
+   }
+  }else{
+   if(!recognizedEmployee){validSince=0;captureBusy=false;setOval("bad");$("cameraStatus").textContent="🔴 No clear face detected — place your face inside the oval."}
+  }
+ }catch(err){
+  console.error("Face scan error:",err);
+  if(!recognizedEmployee){setOval("bad");$("cameraStatus").textContent="Face scan is retrying…"}
+ }finally{scanning=false;setTimeout(scanLoop,120)}
 }
 function clearAfterAttendance(message){
-  recognizedEmployee=null;
-  validSince=0;
-  captureBusy=false;
-  attendanceCooldownUntil=performance.now()+900;
-  $("recognized").classList.add("hidden");
-  $("timeIn").disabled=true;
-  $("timeOut").disabled=true;
-  setOval("bad");
-  $("cameraStatus").textContent=message||"🔴 Ready — place the next face inside the oval.";
+ recognizedEmployee=null;
+ validSince=0;
+ captureBusy=false;
+ attendanceCooldownUntil=performance.now()+900;
+ $("recognized").classList.add("hidden");
+ $("timeIn").disabled=true;
+ $("timeOut").disabled=true;
+ setOval("bad");
+ $("cameraStatus").textContent=message||"🔴 Ready — place the next face inside the oval.";
 }
 function record(type){
  if(!recognizedEmployee){$("result").innerHTML='<div class="result late-result">Face not recognized.</div>';return}
