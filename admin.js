@@ -1,5 +1,5 @@
 const ADMIN_EMAIL="bigguy@admin.com",ADMIN_PASSWORD="bigguyadmin123";
-const KEY="bigguys_dtr_v2",MODEL_URL="https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights";
+const KEY="bigguys_dtr_v2",MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
@@ -25,8 +25,25 @@ function refresh(){
 }
 async function loadModels(){
  if(modelsReady)return true;
+ if(typeof faceapi==="undefined"){
+   $("enrollStatus").textContent="Face recognition library did not load. Refresh the page.";
+   return false;
+ }
  $("enrollStatus").textContent="Loading face recognition model…";
- try{await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)]);modelsReady=true;$("enrollStatus").textContent="Face recognition ready.";return true}catch(e){$("enrollStatus").textContent="Could not load face models.";return false}
+ for(const url of MODEL_URLS){
+   try{
+     await Promise.all([
+       faceapi.nets.tinyFaceDetector.loadFromUri(url),
+       faceapi.nets.faceLandmark68TinyNet.loadFromUri(url),
+       faceapi.nets.faceRecognitionNet.loadFromUri(url)
+     ]);
+     modelsReady=true;
+     $("enrollStatus").textContent="Face recognition ready.";
+     return true;
+   }catch(e){ console.warn("Face model source failed:",url,e); }
+ }
+ $("enrollStatus").textContent="Could not load face models. Check your internet connection and refresh.";
+ return false;
 }
 $("loginBtn").onclick=()=>{if($("adminEmail").value.trim()===ADMIN_EMAIL&&$("adminPassword").value===ADMIN_PASSWORD){$("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");refresh()}else $("loginError").textContent="Invalid admin email or password."};
 $("logoutBtn").onclick=()=>{$("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value=""};

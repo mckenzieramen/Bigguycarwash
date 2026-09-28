@@ -1,5 +1,5 @@
 const KEY="bigguys_dtr_v2";
-const MODEL_URL="https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights";
+const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
 let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false;
 
@@ -18,20 +18,27 @@ setInterval(tick,1000); tick();
 
 async function loadModels(){
  if(modelsReady)return true;
- $("cameraStatus").textContent="Loading face recognition…";
- try{
-   await Promise.all([
-     faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-     faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-     faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-   ]);
-   modelsReady=true;
-   return true;
- }catch(err){
-   console.error("Face model error:",err);
-   $("cameraStatus").textContent="Face model failed to load. Refresh the page and try again.";
+ if(typeof faceapi==="undefined"){
+   $("cameraStatus").textContent="Face recognition library did not load. Refresh the page.";
    return false;
  }
+ $("cameraStatus").textContent="Loading face recognition…";
+ for(const url of MODEL_URLS){
+   try{
+     await Promise.all([
+       faceapi.nets.tinyFaceDetector.loadFromUri(url),
+       faceapi.nets.faceLandmark68TinyNet.loadFromUri(url),
+       faceapi.nets.faceRecognitionNet.loadFromUri(url)
+     ]);
+     modelsReady=true;
+     $("cameraStatus").textContent="Camera ready — place your face inside the oval.";
+     return true;
+   }catch(err){
+     console.warn("Face model source failed:",url,err);
+   }
+ }
+ $("cameraStatus").textContent="Face recognition model could not load. Check your internet connection and refresh.";
+ return false;
 }
 
 async function startCamera(){
@@ -69,6 +76,7 @@ async function scanLoop(){
    ).withFaceLandmarks(true).withFaceDescriptor();
 
    if(detection){
+     $("cameraStatus").textContent="Face detected — verifying employee…";
      let best=null,bestDistance=Infinity;
      for(const employee of state.employees){
        const descriptor=state.faces[employee.id];
@@ -103,7 +111,7 @@ async function scanLoop(){
    console.error("Face scan error:",err);
  }
  scanning=false;
- setTimeout(scanLoop,500);
+ setTimeout(scanLoop,300);
 }
 
 function record(type){
