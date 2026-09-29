@@ -324,7 +324,7 @@ async function runAutoEnrollment(){
      return true;
    }catch(err){
      console.error('Face enrollment cloud save failed:',err);
-     const detail=err?.code||err?.message||'Unknown Firebase error';
+     const detail=[err?.code,err?.message].filter(Boolean).join(' — ')||'Unknown Firebase error';
      $("enrollStatus").textContent="Cloud save could not be confirmed.";
      $("enrollResult").innerHTML=`<div class="result late-result">Face captured, but Firebase did not confirm the save.<br><small>${detail}</small></div>`;
    }

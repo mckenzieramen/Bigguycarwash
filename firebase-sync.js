@@ -102,19 +102,42 @@
     return readCloud();
   }
 
-  async function saveFaceEnrollment(employeeId,samples){
-    await initFirebase(); if(!isAdmin())throw new Error('Admin authentication required.');
-    if(!employeeId||!Array.isArray(samples)||samples.length<5)throw new Error('Invalid face enrollment data.');
-    const ref=db.doc('bigguys/public'); const now=new Date().toISOString();
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(ref),d=snap.exists?(snap.data()||{}):{};
-      const faces=d.faces&&typeof d.faces==='object'?{...d.faces}:{};
-      const faceUpdatedAt=d.faceUpdatedAt&&typeof d.faceUpdatedAt==='object'?{...d.faceUpdatedAt}:{};
-      faces[employeeId]=samples.map(x=>Array.from(x)); faceUpdatedAt[employeeId]=now;
-      tx.set(ref,{faces,faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+  function serializeFaceSamples(samples){
+    if(!Array.isArray(samples)||samples.length<5)throw new Error('invalid-argument: at least 5 face samples are required.');
+    const out=samples.map((sample,si)=>{
+      const arr=Array.from(sample||[]);
+      if(arr.length!==128)throw new Error(`invalid-argument: face sample ${si+1} must contain 128 values.`);
+      return arr.map((n,ni)=>{
+        const v=Number(n);
+        if(!Number.isFinite(v))throw new Error(`invalid-argument: face sample ${si+1}, value ${ni+1} is not a finite number.`);
+        return v;
+      });
     });
+    return out;
+  }
+  async function saveFaceEnrollment(employeeId,samples){
+    await initFirebase();
+    if(!isAdmin())throw new Error('unauthenticated: Admin authentication required.');
+    if(!employeeId)throw new Error('invalid-argument: employee ID is missing.');
+    const serialized=serializeFaceSamples(samples);
+    const ref=db.doc('bigguys/public');
+    const now=new Date().toISOString();
+    // Read current cloud document, merge only the face record, then write a plain JSON-safe payload.
+    // This avoids transaction argument/serialization issues with face-api typed arrays and stale local state.
+    const snap=await ref.get();
+    const d=snap.exists?(snap.data()||{}):{};
+    const faces=d.faces&&typeof d.faces==='object'&&!Array.isArray(d.faces)?{...d.faces}:{};
+    const faceUpdatedAt=d.faceUpdatedAt&&typeof d.faceUpdatedAt==='object'&&!Array.isArray(d.faceUpdatedAt)?{...d.faceUpdatedAt}:{};
+    faces[String(employeeId)]=serialized;
+    faceUpdatedAt[String(employeeId)]=now;
+    await ref.set({faces:faces,faceUpdatedAt:faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    const verify=await ref.get();
+    if(!verify.exists)throw new Error('failed-precondition: Firestore document was not created.');
+    const saved=verify.data()||{};
+    const savedSamples=saved.faces?.[String(employeeId)];
+    if(!Array.isArray(savedSamples)||savedSamples.length<5||savedSamples.some(x=>!Array.isArray(x)||x.length!==128))
+      throw new Error('failed-precondition: Firestore did not confirm the saved face enrollment.');
     const fresh=await readCloud();
-    if(!Array.isArray(fresh.faces?.[employeeId])||fresh.faces[employeeId].length<5)throw new Error('permission-denied: Firestore did not return the saved face enrollment.');
     return fresh;
   }
 
