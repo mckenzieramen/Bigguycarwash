@@ -428,7 +428,7 @@ function showEmployeeHistory(id){
    box.scrollIntoView({behavior:"smooth",block:"nearest"});
  }
 }
-function deleteEmployee(id){
+async function deleteEmployee(id){
  const employee=state.employees.find(e=>e.id===id);
  if(!employee)return;
  const ok=confirm(`Delete employee ${employee.name} (${employee.id})?\n\nThis will also delete the employee's enrolled face, attendance records, and sales records from this browser.`);
