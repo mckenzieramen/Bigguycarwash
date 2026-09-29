@@ -202,9 +202,15 @@ $("employeeForm").onsubmit=async e=>{
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=nextEmployeeId(hireDate);
-   state.employees.push({id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate});
+   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate};
+   state.employees.push(employee);
    localStorage.setItem(KEY,JSON.stringify(state));
-   await syncAdminNow();
+   if(window.BigGuysCloud?.saveEmployee){
+     state=await window.BigGuysCloud.saveEmployee(employee);
+     localStorage.setItem(KEY,JSON.stringify(state));
+   }else{
+     await syncAdminNow();
+   }
    e.target.reset();
    $("empStart").value='08:00';
    $("empHireDate").value=today();
@@ -218,7 +224,7 @@ $("employeeForm").onsubmit=async e=>{
    if(btn){btn.disabled=false;btn.textContent='ADD EMPLOYEE & ENROLL FACE';}
  }
 };
-$("salesForm").onsubmit=async e=>{e.preventDefault();state.sales.push({id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value});try{await save();e.target.reset();refresh()}catch(err){alert('Sale was saved locally but Firebase did not confirm the cloud save. Please keep this device online and try again.')}};
+$("salesForm").onsubmit=async e=>{e.preventDefault();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value};state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}localStorage.setItem(KEY,JSON.stringify(state));e.target.reset();refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 let enrollmentRunning=false,enrollmentSamples=[];
 function normalizeFaceRecords(value){
@@ -287,7 +293,12 @@ async function runAutoEnrollment(){
      let lastErr=null, confirmed=false;
      for(let attempt=1;attempt<=5&&!confirmed;attempt++){
        try{
-         await syncAdminNow();
+         if(window.BigGuysCloud?.saveFaceEnrollment){
+           state=await window.BigGuysCloud.saveFaceEnrollment(id,enrollmentSamples);
+           localStorage.setItem(KEY,JSON.stringify(state));
+         }else{
+           await syncAdminNow();
+         }
          confirmed=Array.isArray(state.faces?.[id]) && state.faces[id].length>=5;
          if(!confirmed) throw new Error('Firebase returned without confirming the enrolled face.');
        }catch(err){
@@ -409,13 +420,18 @@ function dailyFinancials(date){
  const difference=hasRemitted?cashRemitted-expected:0;
  return {totalSale,cash,expenses,cashRemitted,expected,difference,short:difference<0?Math.abs(difference):0,over:difference>0?difference:0,hasRemitted};
 }
-function saveDailyReport(){
+async function saveDailyReport(){
  const date=$("reportDate").value||today();
  const cash=Number($("reportCash").value||0),expenses=Number($("reportExpenses").value||0);
  const remittedValue=$("reportCashRemitted").value;
- state.dailyReports[date]={cash,expenses,cashRemitted:remittedValue===""?null:Number(remittedValue)};
- save();
- makeReport("daily");
+ const report={cash,expenses,cashRemitted:remittedValue===""?null:Number(remittedValue)};
+ state.dailyReports[date]=report;
+ try{
+   if(window.BigGuysCloud?.saveDailyReport){ state=await window.BigGuysCloud.saveDailyReport(date,report); }
+   else { state=await save(); }
+   localStorage.setItem(KEY,JSON.stringify(state));
+   makeReport("daily");
+ }catch(err){ console.error(err); alert(`Daily report cloud save failed: ${err?.code||err?.message||err}`); }
 }
 function loadDailyReportInputs(){
  const date=$("reportDate").value||today(),r=state.dailyReports[date]||{};
@@ -477,7 +493,7 @@ document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListene
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;state=remote;localStorage.setItem(KEY,JSON.stringify(state));if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
 async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
-setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000); window.addEventListener("load",initCloud);
+setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));
 

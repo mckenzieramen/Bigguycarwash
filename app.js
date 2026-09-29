@@ -58,7 +58,7 @@ function saveFaceSnapshot(employee,detection){
   const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy),canvas=document.createElement("canvas");
   canvas.width=360;canvas.height=Math.max(420,Math.round(360*sh/sw));
   const ctx=canvas.getContext("2d");ctx.save();ctx.translate(canvas.width,0);ctx.scale(-1,1);ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);ctx.restore();
-  const snap={employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.88),capturedAt:new Date().toISOString()}; localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify(snap)); state.lastFaceCapture=snap; if(window.BIGGUYS_CLOUD?.ready) window.BIGGUYS_CLOUD.push(state).catch(console.warn);
+  const snap={employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.88),capturedAt:new Date().toISOString()}; localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify(snap)); state.lastFaceCapture=snap; if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance({employeeId:employee.id,date:today(),clockIn:null,clockOut:null,status:'snapshot'},snap).catch(console.warn); }
  }catch(err){console.warn("Could not save face snapshot",err)}
 }
 async function verifyFace(detection){
@@ -131,7 +131,8 @@ function record(type){
   }
   const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
   attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockOut:null,status};
-  state.attendance.push(attendance);save();
+  state.attendance.push(attendance);
+  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;localStorage.setItem(KEY,JSON.stringify(state));}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
   const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
   $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
  }else{
@@ -145,7 +146,8 @@ function record(type){
    clearAfterAttendance("🔴 Ready — place the next face inside the oval.");
    return;
   }
-  attendance.clockOut=now;save();
+  attendance.clockOut=now;
+  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;localStorage.setItem(KEY,JSON.stringify(state));}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
   $("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${employee.name}<br>${now}</div>`;
  }
  clearAfterAttendance("🔴 Attendance saved — scanning for the next employee…");
