@@ -152,7 +152,32 @@
     return readCloud();
   }
   async function saveSale(sale){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!sale?.id)throw new Error('invalid-argument: sale ID is missing.');await db.doc(`${C.sales}/${sale.id}`).set({...sale,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
-  async function saveAttendance(record,snapshot){await initFirebase();if(!record?.employeeId)throw new Error('invalid-argument: employee ID is missing.');if(!record.id){record={...record,id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`)};}await db.doc(`${C.attendance}/${record.id}`).set({...record,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(snapshot)await db.doc('bigguys_meta/attendance').set({lastFaceCapture:snapshot,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
+  async function saveAttendance(record,snapshot){
+    await initFirebase();
+    if(!record?.employeeId)throw new Error('invalid-argument: employee ID is missing.');
+    if(!record.id)record={...record,id:`attendance_${String(record.employeeId).replace(/[^a-zA-Z0-9_-]/g,"_")}_${record.date||new Date().toISOString().slice(0,10)}`};
+    const ref=db.doc(`${C.attendance}/${record.id}`);
+    if(record.punchType==="in") {
+      await db.runTransaction(async tx=>{
+        const snap=await tx.get(ref);
+        if(snap.exists)throw new Error(`already-recorded: Time In already exists for ${record.employeeId} on ${record.date}.`);
+        const data={...record,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+        tx.set(ref,data,{merge:false});
+      });
+    } else if(record.punchType==="out") {
+      await db.runTransaction(async tx=>{
+        const snap=await tx.get(ref);
+        if(!snap.exists)throw new Error(`invalid-state: No Time In record exists for ${record.employeeId} on ${record.date}.`);
+        const existing=snap.data()||{};
+        if(existing.clockOut)throw new Error(`already-recorded: Time Out already exists for ${record.employeeId} on ${record.date}.`);
+        tx.set(ref,{clockOut:record.clockOut,clockOutAt:record.clockOutAt,punchType:"out",updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      });
+    } else {
+      await ref.set({...record,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    }
+    if(snapshot)await db.doc('bigguys_meta/attendance').set({lastFaceCapture:snapshot,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    return readCloud();
+  }
   async function saveAttendanceSnapshot(snapshot){await initFirebase();if(!snapshot?.employeeId)throw new Error('invalid-argument: employee ID is missing.');await db.doc('bigguys_meta/attendance').set({lastFaceCapture:snapshot,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   async function saveDailyReport(date,report){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');await db.doc(`${C.reports}/${date}`).set({...report,date,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   function startListeners(onRemote){

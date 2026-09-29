@@ -11,6 +11,10 @@ let attendanceCooldownUntil=0;
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const timeNow=()=>new Date().toTimeString().slice(0,8);
 const minutes=t=>{const [h,m]=t.split(":").map(Number);return h*60+m};
+function findTodayAttendance(employeeId,date=today()){
+ const rows=(state.attendance||[]).filter(a=>String(a.employeeId)===String(employeeId)&&a.date===date&&(a.clockIn||a.clockOut));
+ return rows.sort((a,b)=>String(a.clockInAt||a.clockIn||"").localeCompare(String(b.clockInAt||b.clockIn||"")))[0]||null;
+}
 function tick(){const n=new Date();$("liveTime").textContent=n.toLocaleTimeString("en-PH",{hour12:true});$("liveDate").textContent=n.toLocaleDateString("en-PH",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
 setInterval(tick,1000);tick();
 function setOval(status){const oval=$("ovalFrame");oval.classList.remove("oval-red","oval-green");oval.classList.add(status==="good"?"oval-green":"oval-red")}
@@ -80,7 +84,7 @@ function saveFaceSnapshot(employee,detection){
 }
 function updateAttendanceControls(employee){
  const date=today();
- const attendance=(state.attendance||[]).find(a=>String(a.employeeId)===String(employee.id)&&a.date===date&&(a.clockIn||a.clockOut));
+ const attendance=findTodayAttendance(employee.id,date);
  const statusEl=$("attendanceStatus");
  const timeInBtn=$("timeIn"),timeOutBtn=$("timeOut");
  if(!attendance){
@@ -172,7 +176,7 @@ async function record(type){
  if(!recognizedEmployee){$("result").innerHTML='<div class="result late-result">Face not recognized.</div>';return}
  const employee=recognizedEmployee;
  const date=today(), nowDate=new Date(), now=timeNow(), iso=nowDate.toISOString();
- let attendance=(state.attendance||[]).find(a=>String(a.employeeId)===String(employee.id)&&a.date===date&&(a.clockIn||a.clockOut));
+ let attendance=findTodayAttendance(employee.id,date);
  recordBusy=true;
  $("timeIn").disabled=true; $("timeOut").disabled=true;
  try{
@@ -185,7 +189,7 @@ async function record(type){
     return;
    }
    const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
-   attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockInAt:iso,clockOut:null,clockOutAt:null,status};
+   attendance={id:`attendance_${String(employee.id).replace(/[^a-zA-Z0-9_-]/g,"_")}_${date}`,date,employeeId:employee.id,clockIn:now,clockInAt:iso,clockOut:null,clockOutAt:null,status,punchType:"in"};
    if(window.BigGuysCloud?.saveAttendance){ state=await window.BigGuysCloud.saveAttendance(attendance); cacheState(); } else { state.attendance=state.attendance||[]; state.attendance.push(attendance); save(); }
    const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
    $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
@@ -205,6 +209,7 @@ async function record(type){
    }
    attendance.clockOut=now;
    attendance.clockOutAt=iso;
+   attendance.punchType="out";
    if(window.BigGuysCloud?.saveAttendance){ state=await window.BigGuysCloud.saveAttendance(attendance); cacheState(); } else save();
    $("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${employee.name}<br>${now}</div>`;
    speakAttendance(`Time out recorded for ${employee.name}. ${now}.`);
