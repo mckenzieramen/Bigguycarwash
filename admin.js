@@ -5,6 +5,7 @@ state.employees=Array.isArray(state.employees)?state.employees:[];
 state.attendance=Array.isArray(state.attendance)?state.attendance:[];
 state.sales=Array.isArray(state.sales)?state.sales:[];
 state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
+state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?state.faceUpdatedAt:{};
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
@@ -278,6 +279,7 @@ async function runAutoEnrollment(){
  }
  if(enrollmentSamples.length>=5){
    state.faces[id]=enrollmentSamples;
+   state.faceUpdatedAt=state.faceUpdatedAt||{}; state.faceUpdatedAt[id]=new Date().toISOString();
    localStorage.setItem(KEY,JSON.stringify(state));
    try{
      // Automatic cloud save with verification. A short transient Firestore delay
@@ -473,6 +475,7 @@ document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListen
 document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
 document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
+window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;state=remote;localStorage.setItem(KEY,JSON.stringify(state));if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
 async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
 setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);

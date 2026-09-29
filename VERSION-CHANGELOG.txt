@@ -1,10 +1,7 @@
-Big Guy's Carwash — V11 Central Sync Protection
-
-- Firestore central data is now merged with local cache before every admin write.
-- Existing employees, attendance, sales, faces, and daily reports are protected from being overwritten by an empty/stale device.
-- Admin listeners merge remote data instead of replacing the current device state with a stale snapshot.
-- Admin save operations update the local state with the confirmed merged Firestore state.
-- New sales and attendance records receive stable IDs for safer cross-device merging.
-- Employee DTR anonymous devices continue to write only attendance data.
-- Face enrollment saves through the same protected central admin sync path.
-- No Firebase credentials or Firestore rules were changed.
+V13 — Central cross-device persistence protection
+- Firestore remains the central source of truth.
+- Added periodic central refresh (5s) plus online/visibility refresh for Admin.
+- Added realtime cloud-state event handling in Admin.
+- Duplicate record merges now prefer cloud unless the local record has a newer explicit _updatedAt timestamp, preventing stale devices from overwriting newer cloud data.
+- Added mutation timestamps to newly created employees, sales, daily reports, and face enrollment metadata.
+- Preserved existing Firebase config, authentication, DTR, payroll, sales, face enrollment, and UI behavior.

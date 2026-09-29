@@ -12,6 +12,7 @@
     attendance:Array.isArray(s?.attendance)?s.attendance:[],
     sales:Array.isArray(s?.sales)?s.sales:[],
     faces:s?.faces&&typeof s.faces==='object'?s.faces:{},
+    faceUpdatedAt:s?.faceUpdatedAt&&typeof s.faceUpdatedAt==='object'?s.faceUpdatedAt:{},
     dailyReports:s?.dailyReports&&typeof s.dailyReports==='object'?s.dailyReports:{},
     lastFaceCapture:s?.lastFaceCapture||null
   });
@@ -27,9 +28,16 @@
     for(const item of [...cloud,...local]){
       const key=keyFn(item);
       if(seen.has(key)){
-        // Prefer the local/newer representation when the same record exists.
+        // Cloud is authoritative for duplicate records unless the local copy
+        // explicitly carries a newer mutation timestamp. This prevents a
+        // stale phone/computer cache from overwriting newer cloud data.
         const idx=out.findIndex(x=>keyFn(x)===key);
-        if(idx>=0)out[idx]=item;
+        if(idx>=0){
+          const existing=out[idx];
+          const et=Date.parse(existing?._updatedAt||'')||0;
+          const it=Date.parse(item?._updatedAt||'')||0;
+          if(it>et)out[idx]=item;
+        }
       }else{seen.add(key);out.push(item);}
     }
     return out;
@@ -42,6 +50,7 @@
       attendance:mergeArray(l.attendance,c.attendance,e=>String(e?.id||keyOf(e,['employeeId','date','clockIn','clockOut'],JSON.stringify(e)))),
       sales:mergeArray(l.sales,c.sales,e=>String(e?.id||keyOf(e,['date','time','employeeId','amount','note'],JSON.stringify(e)))),
       faces:mergeObject(l.faces,c.faces),
+      faceUpdatedAt:mergeObject(l.faceUpdatedAt,c.faceUpdatedAt),
       dailyReports:mergeObject(l.dailyReports,c.dailyReports),
       // Keep the most recent capture when both devices have one.
       lastFaceCapture:(new Date(l.lastFaceCapture?.capturedAt||0)>=new Date(c.lastFaceCapture?.capturedAt||0)?l.lastFaceCapture:c.lastFaceCapture)||null
@@ -81,6 +90,7 @@
     const cloud={
       employees:Array.isArray(docs.public.employees)?docs.public.employees:[],
       faces:docs.public.faces&&typeof docs.public.faces==='object'?docs.public.faces:{},
+        faceUpdatedAt:docs.public.faceUpdatedAt&&typeof docs.public.faceUpdatedAt==='object'?docs.public.faceUpdatedAt:{},
       attendance:Array.isArray(docs.attendance.attendance)?docs.attendance.attendance:[],
       lastFaceCapture:docs.attendance.lastFaceCapture||null,
       sales:Array.isArray(docs.business.sales)?docs.business.sales:[],
@@ -100,6 +110,7 @@
       const cloud={
         employees:Array.isArray(docs.public.employees)?docs.public.employees:[],
         faces:docs.public.faces&&typeof docs.public.faces==='object'?docs.public.faces:{},
+      faceUpdatedAt:docs.public.faceUpdatedAt&&typeof docs.public.faceUpdatedAt==='object'?docs.public.faceUpdatedAt:{},
         attendance:Array.isArray(docs.attendance.attendance)?docs.attendance.attendance:[],
         lastFaceCapture:docs.attendance.lastFaceCapture||null,
         sales:Array.isArray(docs.business.sales)?docs.business.sales:[],
@@ -109,7 +120,7 @@
       const stamp=firebase.firestore.FieldValue.serverTimestamp();
       if(isAdmin()){
         await Promise.all([
-          db.doc('bigguys/public').set({employees:merged.employees,faces:merged.faces,updatedAt:stamp},{merge:true}),
+          db.doc('bigguys/public').set({employees:merged.employees,faces:merged.faces,faceUpdatedAt:merged.faceUpdatedAt,updatedAt:stamp},{merge:true}),
           db.doc('bigguys/attendance').set({attendance:merged.attendance,lastFaceCapture:merged.lastFaceCapture,updatedAt:stamp},{merge:true}),
           db.doc('bigguys/business').set({sales:merged.sales,dailyReports:merged.dailyReports,updatedAt:stamp},{merge:true})
         ]);
@@ -170,6 +181,7 @@
           status({configured:true,ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
         }
         startListeners(onRemote);
+        startCentralRefresh();
         return true;
       }catch(err){
         console.error('Firebase initialization failed:',err);
@@ -213,6 +225,26 @@
     readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;
     unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];
     status({configured,ready:false,status:'signed-out',push:async()=>false});
+  }
+
+  let refreshTimer=null;
+  function startCentralRefresh(){
+    if(refreshTimer||!isAdmin())return;
+    const refresh=async()=>{
+      try{
+        const local=window.__BIGGUYS_CURRENT_STATE||{};
+        const next=await readState(local);
+        window.__BIGGUYS_CURRENT_STATE=next;
+        status({configured:true,ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
+        window.dispatchEvent(new CustomEvent('bigguys:cloud-state',{detail:next}));
+      }catch(err){
+        console.warn('Central refresh failed:',err);
+        status({configured:true,ready:true,status:'error',lastSyncError:err,error:err});
+      }
+    };
+    refreshTimer=setInterval(refresh,5000);
+    window.addEventListener('online',refresh);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
   }
 
   window.BigGuysCloud={
