@@ -450,6 +450,7 @@ function renderEmployeeDtr(id){
  const todayRecord=rows.find(a=>a.date===today()); const todaySales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===today()).reduce((t,x)=>t+Number(x.amount||0),0);
  const rate=commRate(todayRecord?.status||"awol");
  const commission=todaySales*rate;
+ const totalSalary=rows.reduce((t,a)=>t+pay(e,a.date),0);
  const type=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";
  const history=rows.length?rows.map(a=>{
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
@@ -458,7 +459,7 @@ function renderEmployeeDtr(id){
  }):[];
  box.className="employee-dtr-profile";
  box.innerHTML=`<div class="dtr-employee-header"><div class="dtr-avatar">${(e.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div class="dtr-employee-main"><span class="section-kicker">EMPLOYEE DTR PROFILE</span><h3>${e.name}</h3><p>${e.id} · ${type} · Schedule ${e.start||"—"}</p></div><button type="button" class="dtr-print" onclick="window.print()">PRINT DTR</button></div>
- <div class="dtr-kpi-grid"><div class="dtr-kpi"><span>TIME IN TODAY</span><b>${todayRecord?.clockIn||"—"}</b><small>${todayRecord?statusBadge(todayRecord.status||"awol"):"No record yet"}</small></div><div class="dtr-kpi"><span>TIME OUT TODAY</span><b>${todayRecord?.clockOut||"—"}</b><small>${todayRecord?.clockOut?dtrHours(todayRecord):"Pending"}</small></div><div class="dtr-kpi"><span>TODAY'S SALES</span><b>${money(todaySales)}</b><small>Commission ${Math.round(rate*100)}%</small></div><div class="dtr-kpi"><span>TOTAL SALES</span><b>${money(totalSales)}</b><small>${rows.length} attendance record${rows.length===1?"":"s"}</small></div><div class="dtr-kpi"><span>TOTAL HOURS</span><b>${(totalMinutes/60).toFixed(2)}</b><small>Completed shifts</small></div><div class="dtr-kpi"><span>TODAY COMMISSION</span><b>${money(commission)}</b><small>${Math.round(rate*100)}% of today's sales</small></div></div>
+ <div class="dtr-kpi-grid"><div class="dtr-kpi"><span>TIME IN TODAY</span><b>${todayRecord?.clockIn||"—"}</b><small>${todayRecord?statusBadge(todayRecord.status||"awol"):"No record yet"}</small></div><div class="dtr-kpi"><span>TIME OUT TODAY</span><b>${todayRecord?.clockOut||"—"}</b><small>${todayRecord?.clockOut?dtrHours(todayRecord):"Pending"}</small></div><div class="dtr-kpi"><span>TODAY'S SALES</span><b>${money(todaySales)}</b><small>Commission ${Math.round(rate*100)}%</small></div><div class="dtr-kpi"><span>TOTAL SALES</span><b>${money(totalSales)}</b><small>${rows.length} attendance record${rows.length===1?"":"s"}</small></div><div class="dtr-kpi"><span>TOTAL HOURS</span><b>${(totalMinutes/60).toFixed(2)}</b><small>Completed shifts</small></div><div class="dtr-kpi"><span>TOTAL SALARY</span><b>${money(totalSalary)}</b><small>Basic pay + commission</small></div><div class="dtr-kpi"><span>TODAY COMMISSION</span><b>${money(commission)}</b><small>${Math.round(rate*100)}% of today's sales</small></div></div>
  <div class="dtr-table-wrap">${history.length?table(history,["DATE","SCHEDULE","TIME IN","TIME OUT","HOURS","SALES","COMMISSION %","COMMISSION","STATUS"]):'<p class="muted dtr-no-records">No DTR history for this employee yet.</p>'}</div>`;
 }
 function refreshDtrSelector(){

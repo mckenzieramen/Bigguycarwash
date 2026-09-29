@@ -70,3 +70,11 @@ V36 — DTR Time In/Time Out + Employee DTR Profile (2026-09-29)
 - Today's Attendance table now also shows Time In, Time Out, Hours, Sales, Commission %, and Commission amount.
 - Added print DTR action and responsive premium dark styling for the employee DTR profile.
 - Preserved existing face enrollment, recognition, Firebase structure, employee IDs, deletion, payroll, sales, dashboard, and navigation.
+
+
+V39 - 2026-09-29
+- Face recognition name/ID confirmation now floats above the DTR screen.
+- Recognition popup automatically disappears after 2 seconds without cancelling the recognized employee.
+- TIME IN/TIME OUT controls remain available so the employee can complete the punch.
+- After a successful punch, the recognition is cleared and the scanner can accept the next employee.
+- Existing once-only Time In/Time Out and voice confirmation behavior preserved.
