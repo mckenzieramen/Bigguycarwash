@@ -1,8 +1,4 @@
-V15 — 2026-09-29
-- Fixed missing Firebase cloud save methods for employee, face enrollment, sales, attendance, and daily reports.
-- Firestore is now authoritative when loading another device; stale localStorage cannot overwrite populated cloud data on startup/listener refresh.
-- Added transaction-based writes to preserve concurrent device changes.
-- Face enrollment writes directly to bigguys/public and verifies the saved descriptor by re-reading Firestore before showing EMPLOYEE ENROLLED.
-- Added central attendance save and face snapshot persistence.
-- Removed the admin localStorage polling loop that could reintroduce stale device data.
-- Preserved existing UI, DTR, payroll, sales, dashboard, Firebase config, and rules.
+Big Guy's Carwash — V17
+Face enrollment Firestore nested-array fix.
+
+Root cause fixed: Firestore rejects arrays nested directly inside arrays. Face descriptor samples are now stored as maps with a `values` array, while the app converts them back to numeric descriptor arrays for face recognition. Existing features and Firebase configuration are preserved.

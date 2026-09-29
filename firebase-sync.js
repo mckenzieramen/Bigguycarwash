@@ -5,11 +5,39 @@
   const configured=!!(cfg.apiKey&&cfg.authDomain&&cfg.projectId&&cfg.appId);
   let db=null,auth=null,readyPromise=null,unsubscribers=[],refreshTimer=null;
 
+  // Firestore does not support arrays nested directly inside arrays.
+  // The app keeps face descriptors as arrays locally, but Firestore stores
+  // each descriptor sample as a map: { values: [128 numbers] }.
+  const normalizeFaceRecord = value => {
+    if(!Array.isArray(value)) return [];
+    if(value.length && value.every(x=>Array.isArray(x))) return value.map(x=>x.map(Number));
+    if(value.length && value.every(x=>x && typeof x==='object' && Array.isArray(x.values))) return value.map(x=>x.values.map(Number));
+    if(value.length===128 && value.every(x=>Number.isFinite(Number(x)))) return [value.map(Number)];
+    return [];
+  };
+  const normalizeFaces = faces => {
+    const out={};
+    if(!faces || typeof faces!=='object' || Array.isArray(faces)) return out;
+    for(const [id,value] of Object.entries(faces)){
+      const samples=normalizeFaceRecord(value);
+      if(samples.length) out[id]=samples;
+    }
+    return out;
+  };
+  const firestoreSafeFaces = faces => {
+    const out={};
+    if(!faces || typeof faces!=='object' || Array.isArray(faces)) return out;
+    for(const [id,value] of Object.entries(faces)){
+      const samples=normalizeFaceRecord(value);
+      if(samples.length) out[id]=samples.map(values=>({values}));
+    }
+    return out;
+  };
   const clean=s=>({
     employees:Array.isArray(s?.employees)?s.employees:[],
     attendance:Array.isArray(s?.attendance)?s.attendance:[],
     sales:Array.isArray(s?.sales)?s.sales:[],
-    faces:s?.faces&&typeof s.faces==='object'?s.faces:{},
+    faces:normalizeFaces(s?.faces),
     faceUpdatedAt:s?.faceUpdatedAt&&typeof s.faceUpdatedAt==='object'?s.faceUpdatedAt:{},
     dailyReports:s?.dailyReports&&typeof s.dailyReports==='object'?s.dailyReports:{},
     lastFaceCapture:s?.lastFaceCapture||null
@@ -58,7 +86,7 @@
     if(!emptyState(cloud) || emptyState(clean(local)))return cloud;
     const s=clean(local);
     await Promise.all([
-      db.doc('bigguys/public').set({employees:s.employees,faces:s.faces,faceUpdatedAt:s.faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
+      db.doc('bigguys/public').set({employees:s.employees,faces:firestoreSafeFaces(s.faces),faceUpdatedAt:s.faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
       db.doc('bigguys/attendance').set({attendance:s.attendance,lastFaceCapture:s.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
       db.doc('bigguys/business').set({sales:s.sales,dailyReports:s.dailyReports,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
     ]);
@@ -79,7 +107,7 @@
     };
     if(isAdmin()){
       await Promise.all([
-        db.doc('bigguys/public').set({employees:merged.employees,faces:merged.faces,faceUpdatedAt:merged.faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
+        db.doc('bigguys/public').set({employees:merged.employees,faces:firestoreSafeFaces(merged.faces),faceUpdatedAt:merged.faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
         db.doc('bigguys/attendance').set({attendance:merged.attendance,lastFaceCapture:merged.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
         db.doc('bigguys/business').set({sales:merged.sales,dailyReports:merged.dailyReports,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
       ]);
@@ -128,14 +156,14 @@
     const d=snap.exists?(snap.data()||{}):{};
     const faces=d.faces&&typeof d.faces==='object'&&!Array.isArray(d.faces)?{...d.faces}:{};
     const faceUpdatedAt=d.faceUpdatedAt&&typeof d.faceUpdatedAt==='object'&&!Array.isArray(d.faceUpdatedAt)?{...d.faceUpdatedAt}:{};
-    faces[String(employeeId)]=serialized;
+    faces[String(employeeId)]=serialized.map(values=>({values}));
     faceUpdatedAt[String(employeeId)]=now;
     await ref.set({faces:faces,faceUpdatedAt:faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     const verify=await ref.get();
     if(!verify.exists)throw new Error('failed-precondition: Firestore document was not created.');
     const saved=verify.data()||{};
     const savedSamples=saved.faces?.[String(employeeId)];
-    if(!Array.isArray(savedSamples)||savedSamples.length<5||savedSamples.some(x=>!Array.isArray(x)||x.length!==128))
+    if(!Array.isArray(savedSamples)||savedSamples.length<5||savedSamples.some(x=>!x||typeof x!=='object'||!Array.isArray(x.values)||x.values.length!==128))
       throw new Error('failed-precondition: Firestore did not confirm the saved face enrollment.');
     const fresh=await readCloud();
     return fresh;

@@ -28,6 +28,7 @@ async function startCamera(){
 function normalizeFaceRecords(value){
  if(!value)return [];
  if(Array.isArray(value)&&value.length&&Array.isArray(value[0]))return value;
+ if(Array.isArray(value)&&value.length&&value.every(x=>x&&typeof x==="object"&&Array.isArray(x.values)))return value.map(x=>x.values);
  if(Array.isArray(value))return [value];
  return [];
 }
