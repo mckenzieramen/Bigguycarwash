@@ -111,3 +111,14 @@ V45 — 2026-09-30 Payroll Monthly Accumulation + Sales Expenses + Premium Logo 
 - Premium visual polish applied to the existing Big Guy's logo presentation without changing the logo asset or core layout.
 - Existing payroll rates retained: Full ₱250, Semi ₱200, Part ₱150; Early/On Time 40%, Late 35%, AWOL/Absent 30%.
 - No-work/no-attendance rule retained: ₱0 for that day.
+
+
+V46 — Daily Sales + Read-Only Reports Update
+- Sales navigation reduced to Daily Sales only.
+- Add Sales now records employee, sales amount, total remittance, other expenses, note, exact date/time.
+- Daily Sales automatically changes to the new date at midnight; history remains available in Reports.
+- Reports are read-only: no expense/remittance editing controls.
+- Reports show Total Sales, Cash Sales, Expenses, Cash Remaining, Transactions, Payroll, Commission, Cars Washed, Sales Breakdown and remittance breakdown.
+- Monthly/Yearly reports include accumulated employee sales; monthly employee view also shows expenses, remitted, commission and payroll.
+- Report snapshots are automatically saved after each sales log.
+- Premium logo sizing/shadow treatment refined without changing the logo asset.
