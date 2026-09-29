@@ -75,43 +75,16 @@ function saveFaceSnapshot(employee,detection){
   const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy),canvas=document.createElement("canvas");
   canvas.width=360;canvas.height=Math.max(420,Math.round(360*sh/sw));
   const ctx=canvas.getContext("2d");ctx.save();ctx.translate(canvas.width,0);ctx.scale(-1,1);ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);ctx.restore();
-  const snap={employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.88),capturedAt:new Date().toISOString()}; localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify(snap)); state.lastFaceCapture=snap; if(window.BigGuysCloud?.saveAttendanceSnapshot){ window.BigGuysCloud.saveAttendanceSnapshot(snap).catch(console.warn); }
+  const snap={employeeId:employee.id,name:employee.name,dataUrl:canvas.toDataURL("image/jpeg",.88),capturedAt:new Date().toISOString()}; localStorage.setItem(LAST_CAPTURE_KEY,JSON.stringify(snap)); state.lastFaceCapture=snap; if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance({employeeId:employee.id,date:today(),clockIn:null,clockOut:null,status:'snapshot'},snap).catch(console.warn); }
  }catch(err){console.warn("Could not save face snapshot",err)}
 }
-function updateAttendanceControls(employee){
- const date=today();
- const attendance=(state.attendance||[]).find(a=>String(a.employeeId)===String(employee.id)&&a.date===date&&(a.clockIn||a.clockOut));
- const statusEl=$("attendanceStatus");
- const timeInBtn=$("timeIn"),timeOutBtn=$("timeOut");
- if(!attendance){
-  statusEl.textContent="● NOT SIGNED IN — TIME IN AVAILABLE";
-  statusEl.className="attendance-status not-signed";
-  timeInBtn.disabled=false; timeOutBtn.disabled=true;
-  return null;
- }
- if(attendance.clockOut){
-  statusEl.textContent=`✓ SIGNED OUT — TIME IN ${attendance.clockIn||"—"} • TIME OUT ${attendance.clockOut}`;
-  statusEl.className="attendance-status signed-out";
-  timeInBtn.disabled=true; timeOutBtn.disabled=true;
-  return attendance;
- }
- statusEl.textContent=`✓ SIGNED IN — TIME IN ${attendance.clockIn||"—"} • TIME OUT AVAILABLE`;
- statusEl.className="attendance-status signed-in";
- timeInBtn.disabled=true; timeOutBtn.disabled=false;
- return attendance;
-}
-
 async function verifyFace(detection){
  const match=bestEmployee(detection.descriptor);
  if(match.employee&&match.distance<=.60){
-  recognizedEmployee=match.employee;
-  saveFaceSnapshot(match.employee,detection);
-  $("employeeName").textContent=match.employee.name;
-  $("employeeId").textContent=match.employee.id;
-  $("recognized").classList.remove("hidden");
-  const current=updateAttendanceControls(match.employee);
-  $("cameraStatus").textContent=current?.clockOut?`✓ ${match.employee.name} already completed TIME IN and TIME OUT today.`:current?.clockIn?`✓ ${match.employee.name} is already SIGNED IN — TIME OUT is available.`:`✓ ${match.employee.name} recognized — TIME IN is available.`;
-  setOval("good");
+   recognizedEmployee=match.employee;
+   saveFaceSnapshot(match.employee,detection);
+   $("cameraStatus").textContent=`✓ ${match.employee.name} recognized — choose TIME IN or TIME OUT`;
+   $("employeeName").textContent=match.employee.name;$("employeeId").textContent=match.employee.id;$("recognized").classList.remove("hidden");$("timeIn").disabled=false;$("timeOut").disabled=false;setOval("good");
  }else{resetRecognition(match.employee?`Face detected, but match is not strong enough (${match.distance.toFixed(2)}). Look straight at the camera.`:"Face captured, but this employee is not enrolled.");setOval("bad")}
 }
 async function scanLoop(){
@@ -162,44 +135,37 @@ function clearAfterAttendance(message){
  setOval("bad");
  $("cameraStatus").textContent=message||"🔴 Ready — place the next face inside the oval.";
 }
-async function record(type){
+function record(type){
  if(!recognizedEmployee){$("result").innerHTML='<div class="result late-result">Face not recognized.</div>';return}
  const employee=recognizedEmployee;
  const date=today(),now=timeNow();
- let attendance=(state.attendance||[]).find(a=>String(a.employeeId)===String(employee.id)&&a.date===date&&(a.clockIn||a.clockOut));
- try{
-  if(type==="in"){
-   if(attendance){
-    updateAttendanceControls(employee);
-    $("result").innerHTML=`<div class="result late-result">ALREADY SIGNED IN<br><br>${employee.name}<br>TIME IN: ${attendance.clockIn||"—"}</div>`;
-    clearAfterAttendance("🔴 Already signed in — scan again for another employee.");
-    return;
-   }
-   const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
-   attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockOut:null,status};
-   if(window.BigGuysCloud?.saveAttendance){ state=await window.BigGuysCloud.saveAttendance(attendance); cacheState(); } else { state.attendance=state.attendance||[]; state.attendance.push(attendance); save(); }
-   const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
-   $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
-  }else{
-   if(!attendance){
-    $("result").innerHTML='<div class="result late-result">NOT SIGNED IN — TIME IN must be recorded first.</div>';
-    clearAfterAttendance("🔴 Not signed in — scan again and choose TIME IN first.");
-    return;
-   }
-   if(attendance.clockOut){
-    $("result").innerHTML=`<div class="result late-result">ALREADY SIGNED OUT<br><br>${employee.name}<br>TIME OUT: ${attendance.clockOut}</div>`;
-    clearAfterAttendance("🔴 Already signed out — scanning for the next employee…");
-    return;
-   }
-   attendance.clockOut=now;
-   if(window.BigGuysCloud?.saveAttendance){ state=await window.BigGuysCloud.saveAttendance(attendance); cacheState(); } else save();
-   $("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${employee.name}<br>${now}</div>`;
+ let attendance=state.attendance.find(a=>a.employeeId===employee.id&&a.date===date);
+ if(type==="in"){
+  if(attendance){
+   $("result").innerHTML='<div class="result late-result">TIME IN is already recorded today.</div>';
+   clearAfterAttendance("🔴 Ready — place the next face inside the oval.");
+   return;
   }
- }catch(err){
-  console.error("Attendance save failed:",err);
-  $("result").innerHTML=`<div class="result late-result">ATTENDANCE WAS NOT SAVED<br><br>${err?.code||err?.message||err}</div>`;
-  updateAttendanceControls(employee);
-  return;
+  const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
+  attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockOut:null,status};
+  state.attendance.push(attendance);
+  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;cacheState();}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
+  const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
+  $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
+ }else{
+  if(!attendance){
+   $("result").innerHTML='<div class="result late-result">TIME IN must be recorded first.</div>';
+   clearAfterAttendance("🔴 Ready — place the next face inside the oval.");
+   return;
+  }
+  if(attendance.clockOut){
+   $("result").innerHTML='<div class="result late-result">TIME OUT is already recorded today.</div>';
+   clearAfterAttendance("🔴 Ready — place the next face inside the oval.");
+   return;
+  }
+  attendance.clockOut=now;
+  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;cacheState();}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
+  $("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${employee.name}<br>${now}</div>`;
  }
  clearAfterAttendance("🔴 Attendance saved — scanning for the next employee…");
 }

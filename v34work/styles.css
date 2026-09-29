@@ -93,5 +93,3 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
  #employeeTable{margin-left:-4px;margin-right:-4px;border-radius:10px}
 }
 .enrollment-steps{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:10px 0 4px}.enrollment-steps span{font-size:11px;padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);color:#b8c2d1}.enrollment-progress{line-height:1.45}
-
-.attendance-status{margin-top:8px;font-weight:700;font-size:14px}.attendance-status.signed-in{color:#24e36b}.attendance-status.not-signed{color:#67a9ff}.attendance-status.signed-out{color:#ffd166}.button-row button:disabled{opacity:.45;cursor:not-allowed}
