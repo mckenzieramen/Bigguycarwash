@@ -30,3 +30,5 @@ V9 — Central data synchronization fix
 - Cloud/local records are merged instead of allowing an empty device cache to overwrite cloud data.
 - Existing computer data can be migrated into the central Firestore documents when those documents are empty.
 - Employee, face, attendance, sales, and report data are preserved across devices.
+
+V10 — Fixed Admin login Firestore initialization: db is initialized before admin profile validation, preserving central Firestore sync.

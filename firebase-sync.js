@@ -144,7 +144,9 @@
     if(!configured)throw new Error('Firebase configuration is missing.');
     if(!window.firebase)throw new Error('Firebase SDK did not load.');
     if(!firebase.apps.length)firebase.initializeApp(cfg);
+    if(!firebase.apps.length)firebase.initializeApp(cfg);
     auth=auth||firebase.auth();
+    db=db||firebase.firestore();
     const user=(await auth.signInWithEmailAndPassword(email,password)).user;
     if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');
     await getAdminProfile(user);
