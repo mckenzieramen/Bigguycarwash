@@ -3,7 +3,8 @@ const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.2
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
 let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false;
 const $=id=>document.getElementById(id);
-const save=()=>{localStorage.setItem(KEY,JSON.stringify(state)); if(window.BIGGUYS_CLOUD?.ready) window.BIGGUYS_CLOUD.push(state).catch(console.warn);};
+const cacheState=()=>{const c={...state,faces:{},lastFaceCapture:null};try{localStorage.setItem(KEY,JSON.stringify(c));}catch(e){console.warn("Local cache skipped:",e);}};
+const save=()=>{cacheState(); if(window.BIGGUYS_CLOUD?.ready) window.BigGuysCloud.push(state).catch(console.warn);};
 const LAST_CAPTURE_KEY="bigguys_last_face_capture";
 const CAPTURE_HOLD_MS=500;
 let attendanceCooldownUntil=0;
@@ -133,7 +134,7 @@ function record(type){
   const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
   attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockOut:null,status};
   state.attendance.push(attendance);
-  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;localStorage.setItem(KEY,JSON.stringify(state));}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
+  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;cacheState();}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
   const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
   $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
  }else{
@@ -148,9 +149,9 @@ function record(type){
    return;
   }
   attendance.clockOut=now;
-  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;localStorage.setItem(KEY,JSON.stringify(state));}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
+  if(window.BigGuysCloud?.saveAttendance){ window.BigGuysCloud.saveAttendance(attendance).then(next=>{state=next;cacheState();}).catch(err=>console.warn('Central attendance save failed:',err)); } else save();
   $("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${employee.name}<br>${now}</div>`;
  }
  clearAfterAttendance("🔴 Attendance saved — scanning for the next employee…");
 }
-$("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); }); } } window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));window.addEventListener("load",async()=>{await initCloud();startCamera();});
+$("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); }); } } window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));window.addEventListener("load",async()=>{await initCloud();startCamera();});

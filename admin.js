@@ -11,14 +11,15 @@ let enrollStream=null,modelsReady=false;
 let attendanceCaptureDisplayedKey=null;
 let attendanceCaptureHideTimer=null;
 const $=id=>document.getElementById(id);
+const cacheState=()=>{const c={...state,faces:{},faceUpdatedAt:{},lastFaceCapture:null};try{localStorage.setItem(KEY,JSON.stringify(c));}catch(e){console.warn("Local cache skipped:",e);}};
 const save=async()=>{
- localStorage.setItem(KEY,JSON.stringify(state));
+ cacheState();
  if(!window.BigGuysCloud?.configured) return state;
  try{
-   await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); },'admin');
+   await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); },'admin');
    if(window.BigGuysCloud?.ready){
      const merged=await window.BigGuysCloud.push(state);
-     if(merged){state=merged;localStorage.setItem(KEY,JSON.stringify(state));}
+     if(merged){state=merged;cacheState();}
    }
    return state;
  }catch(err){
@@ -28,9 +29,9 @@ const save=async()=>{
 };
 async function syncAdminNow(){
  if(!window.BigGuysCloud?.configured) return state;
- await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); },'admin');
+ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); },'admin');
  const merged=await window.BigGuysCloud.push(state);
- if(merged){state=merged;localStorage.setItem(KEY,JSON.stringify(state));}
+ if(merged){state=merged;cacheState();}
  return state;
 }
 function syncStateFromStorage(){
@@ -195,7 +196,7 @@ $("loginBtn").onclick=async()=>{
     $("loginError").textContent="";refresh();startClock();
     BigGuysCloud.init(state,remote=>{
       state=remote;
-      localStorage.setItem(KEY,JSON.stringify(state));
+      cacheState();
       refresh();
     },'admin').catch(err=>{
       console.error('Background Firestore sync failed:',err);
@@ -218,16 +219,16 @@ $("employeeForm").onsubmit=async e=>{
  try{
    await window.BigGuysCloud?.init?.(state,remote=>{
      state=remote;
-     localStorage.setItem(KEY,JSON.stringify(state));
+     cacheState();
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=nextEmployeeId(hireDate);
    const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate};
    state.employees.push(employee);
-   localStorage.setItem(KEY,JSON.stringify(state));
+   cacheState();
    if(window.BigGuysCloud?.saveEmployee){
      state=await window.BigGuysCloud.saveEmployee(employee);
-     localStorage.setItem(KEY,JSON.stringify(state));
+     cacheState();
    }else{
      await syncAdminNow();
    }
@@ -244,7 +245,7 @@ $("employeeForm").onsubmit=async e=>{
    if(btn){btn.disabled=false;btn.textContent='ADD EMPLOYEE & ENROLL FACE';}
  }
 };
-$("salesForm").onsubmit=async e=>{e.preventDefault();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value};state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}localStorage.setItem(KEY,JSON.stringify(state));e.target.reset();refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
+$("salesForm").onsubmit=async e=>{e.preventDefault();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value};state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}cacheState();e.target.reset();refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 let enrollmentRunning=false,enrollmentSamples=[];
 function normalizeFaceRecords(value){
@@ -306,7 +307,7 @@ async function runAutoEnrollment(){
  if(enrollmentSamples.length>=5){
    state.faces[id]=enrollmentSamples;
    state.faceUpdatedAt=state.faceUpdatedAt||{}; state.faceUpdatedAt[id]=new Date().toISOString();
-   localStorage.setItem(KEY,JSON.stringify(state));
+   cacheState();
    try{
      // Automatic cloud save with verification. A short transient Firestore delay
      // must not make the employee repeat the face scan.
@@ -315,7 +316,7 @@ async function runAutoEnrollment(){
        try{
          if(window.BigGuysCloud?.saveFaceEnrollment){
            state=await window.BigGuysCloud.saveFaceEnrollment(id,enrollmentSamples);
-           localStorage.setItem(KEY,JSON.stringify(state));
+           cacheState();
          }else{
            await syncAdminNow();
          }
@@ -449,7 +450,7 @@ async function saveDailyReport(){
  try{
    if(window.BigGuysCloud?.saveDailyReport){ state=await window.BigGuysCloud.saveDailyReport(date,report); }
    else { state=await save(); }
-   localStorage.setItem(KEY,JSON.stringify(state));
+   cacheState();
    makeReport("daily");
  }catch(err){ console.error(err); alert(`Daily report cloud save failed: ${err?.code||err?.message||err}`); }
 }
@@ -511,8 +512,8 @@ document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListen
 document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
 document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
-window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;state=remote;localStorage.setItem(KEY,JSON.stringify(state));if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
-async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
+window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;state=remote;cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
+async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
 setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));

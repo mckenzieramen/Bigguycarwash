@@ -1,3 +1,8 @@
-Big Guy's Carwash V19
-Change: Attendance Record display now appears once for exactly 1 second per new capture, then stays hidden even when dashboard realtime refreshes. Attendance data itself is preserved.
-Baseline: V17 locked; V19 contains only the requested attendance-display behavior.
+V20 — scalable central storage fix
+- Replaced aggregate Firestore documents with per-record collections for employees, faces, attendance, sales, and reports.
+- Prevents a single document from filling up as employees/attendance/sales grow.
+- Face enrollment stores each employee's face samples in its own document.
+- Attendance and sales are stored one record per document.
+- Local browser cache no longer stores face descriptors or base64 attendance snapshots, preventing browser storage quota errors.
+- Added Firestore rules for the scalable collections.
+- Preserved existing Firebase Auth, DTR, payroll, sales, dashboard, and face recognition flows.

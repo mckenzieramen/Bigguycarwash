@@ -1,238 +1,110 @@
-/* Big Guy's Carwash — Firebase central source of truth.
-   Cloud Firestore is authoritative across devices. localStorage is offline cache only. */
+/* Big Guy's Carwash — scalable Firestore central source of truth.
+   Large/repeating data is stored one record per Firestore document so the app
+   does not hit the 1 MiB limit of a single aggregate document. localStorage
+   is only a small offline cache; Firebase is authoritative. */
 (function(){
   const cfg=window.BIGGUYS_FIREBASE_CONFIG||{};
   const configured=!!(cfg.apiKey&&cfg.authDomain&&cfg.projectId&&cfg.appId);
   let db=null,auth=null,readyPromise=null,unsubscribers=[],refreshTimer=null;
-
-  // Firestore does not support arrays nested directly inside arrays.
-  // The app keeps face descriptors as arrays locally, but Firestore stores
-  // each descriptor sample as a map: { values: [128 numbers] }.
-  const normalizeFaceRecord = value => {
-    if(!Array.isArray(value)) return [];
-    if(value.length && value.every(x=>Array.isArray(x))) return value.map(x=>x.map(Number));
-    if(value.length && value.every(x=>x && typeof x==='object' && Array.isArray(x.values))) return value.map(x=>x.values.map(Number));
-    if(value.length===128 && value.every(x=>Number.isFinite(Number(x)))) return [value.map(Number)];
+  const C={employees:'bigguys_employees',faces:'bigguys_faces',attendance:'bigguys_attendance',sales:'bigguys_sales',reports:'bigguys_reports'};
+  const normalizeFaceRecord=value=>{
+    if(!Array.isArray(value))return [];
+    if(value.length&&value.every(x=>x&&typeof x==='object'&&!Array.isArray(x)&&Array.isArray(x.values)))return value.map(x=>x.values.map(Number));
+    if(value.length&&value.every(x=>Array.isArray(x)))return value.map(x=>x.map(Number));
+    if(value.length===128&&value.every(x=>Number.isFinite(Number(x))))return [value.map(Number)];
     return [];
-  };
-  const normalizeFaces = faces => {
-    const out={};
-    if(!faces || typeof faces!=='object' || Array.isArray(faces)) return out;
-    for(const [id,value] of Object.entries(faces)){
-      const samples=normalizeFaceRecord(value);
-      if(samples.length) out[id]=samples;
-    }
-    return out;
-  };
-  const firestoreSafeFaces = faces => {
-    const out={};
-    if(!faces || typeof faces!=='object' || Array.isArray(faces)) return out;
-    for(const [id,value] of Object.entries(faces)){
-      const samples=normalizeFaceRecord(value);
-      if(samples.length) out[id]=samples.map(values=>({values}));
-    }
-    return out;
   };
   const clean=s=>({
     employees:Array.isArray(s?.employees)?s.employees:[],
     attendance:Array.isArray(s?.attendance)?s.attendance:[],
     sales:Array.isArray(s?.sales)?s.sales:[],
-    faces:normalizeFaces(s?.faces),
+    faces:s?.faces&&typeof s.faces==='object'&&!Array.isArray(s.faces)?s.faces:{},
     faceUpdatedAt:s?.faceUpdatedAt&&typeof s.faceUpdatedAt==='object'?s.faceUpdatedAt:{},
     dailyReports:s?.dailyReports&&typeof s.dailyReports==='object'?s.dailyReports:{},
     lastFaceCapture:s?.lastFaceCapture||null
   });
   const isAdmin=()=>!!(auth?.currentUser&&!auth.currentUser.isAnonymous);
-  const emptyState=s=>!s.employees.length&&!s.attendance.length&&!s.sales.length&&!Object.keys(s.faces).length&&!Object.keys(s.dailyReports).length;
-  const idOf=(x,fallback)=>String(x?.id||fallback||JSON.stringify(x));
-  const mergeArrays=(cloud=[],local=[],keyFn)=>{
-    const out=[...cloud],keys=new Set(cloud.map(keyFn));
-    for(const item of local){const k=keyFn(item);if(!keys.has(k)){out.push(item);keys.add(k);}}
-    return out;
-  };
-
   function status(extra){window.BIGGUYS_CLOUD=Object.assign({configured,ready:!!db,status:db?'connected':'waiting'},extra||{});}
-  async function ensureAuth(mode){
-    if(!auth)auth=firebase.auth();
-    if(auth.currentUser)return auth.currentUser;
-    if(mode==='admin')throw new Error('Admin authentication required. Please log in first.');
-    return (await auth.signInAnonymously()).user;
-  }
   async function initFirebase(){
     if(!configured)throw new Error('Firebase configuration is missing.');
     if(!window.firebase)throw new Error('Firebase SDK did not load.');
     if(!firebase.apps.length)firebase.initializeApp(cfg);
     db=db||firebase.firestore(); auth=auth||firebase.auth();
   }
+  async function ensureAuth(mode){
+    if(!auth)auth=firebase.auth();
+    if(auth.currentUser)return auth.currentUser;
+    if(mode==='admin')throw new Error('Admin authentication required. Please log in first.');
+    return (await auth.signInAnonymously()).user;
+  }
+  async function getAll(col){const snap=await db.collection(col).get();return snap.docs.map(d=>({id:d.id,...(d.data()||{})}));}
+  async function getDocSafe(path){const s=await db.doc(path).get();return s.exists?(s.data()||{}):{};}
+  function objectFromDocs(rows){const o={};rows.forEach(r=>{if(r.id)o[r.id]=r;});return o;}
   async function readCloud(){
     if(!db)throw new Error('Firebase Firestore is not initialized.');
-    const [p,a,b]=await Promise.all([
-      db.doc('bigguys/public').get(),
-      db.doc('bigguys/attendance').get(),
-      isAdmin()?db.doc('bigguys/business').get():Promise.resolve(null)
-    ]);
-    const pd=p.exists?(p.data()||{}):{}; const ad=a.exists?(a.data()||{}):{}; const bd=b?.exists?(b.data()||{}):{};
-    return clean({
-      employees:pd.employees,faces:pd.faces,faceUpdatedAt:pd.faceUpdatedAt,
-      attendance:ad.attendance,lastFaceCapture:ad.lastFaceCapture,
-      sales:bd.sales,dailyReports:bd.dailyReports
-    });
+    const [employees,faces,attendance]=await Promise.all([getAll(C.employees),getAll(C.faces),getAll(C.attendance)]);
+    let sales=[],reports=[];
+    if(isAdmin()) [sales,reports]=await Promise.all([getAll(C.sales),getAll(C.reports)]);
+    const faceMap={},faceTimes={};
+    faces.forEach(r=>{const id=String(r.employeeId||r.id);const samples=normalizeFaceRecord(r.samples);if(samples.length){faceMap[id]=samples;faceTimes[id]=r.updatedAtISO||r.faceUpdatedAt||null;}});
+    const attendanceRows=attendance.map(r=>{const x={...r};delete x.id;return x;});
+    const salesRows=sales.map(r=>{const x={...r};delete x.id;return x;});
+    const reportMap={};reports.forEach(r=>{if(r.id){const x={...r};delete x.id;delete x.date;reportMap[r.date||r.id]=x;}});
+    let lastFaceCapture=null;
+    // Lightweight latest capture is optional and deliberately kept separate from history.
+    try{const latest=await db.doc('bigguys_meta/attendance').get();if(latest.exists)lastFaceCapture=latest.data()?.lastFaceCapture||null;}catch(e){}
+    return clean({employees:employees.map(x=>{const y={...x};delete y.id;return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
   }
-  async function readState(){return readCloud();}
-
-  async function migrateLocalIfCloudEmpty(local){
+  async function migrateLegacyIfNeeded(initial){
     if(!isAdmin())return readCloud();
-    const cloud=await readCloud();
-    if(!emptyState(cloud) || emptyState(clean(local)))return cloud;
-    const s=clean(local);
-    await Promise.all([
-      db.doc('bigguys/public').set({employees:s.employees,faces:firestoreSafeFaces(s.faces),faceUpdatedAt:s.faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
-      db.doc('bigguys/attendance').set({attendance:s.attendance,lastFaceCapture:s.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
-      db.doc('bigguys/business').set({sales:s.sales,dailyReports:s.dailyReports,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
-    ]);
+    const current=await readCloud();
+    const hasNew=current.employees.length||current.attendance.length||current.sales.length||Object.keys(current.faces).length||Object.keys(current.dailyReports).length;
+    if(hasNew)return current;
+    const [p,a,b]=await Promise.all([getDocSafe('bigguys/public'),getDocSafe('bigguys/attendance'),getDocSafe('bigguys/business')]);
+    const legacy=clean({employees:p.employees,faces:p.faces,faceUpdatedAt:p.faceUpdatedAt,attendance:a.attendance,sales:b.sales,dailyReports:b.dailyReports,lastFaceCapture:a.lastFaceCapture});
+    const source=legacy.employees.length||legacy.attendance.length||legacy.sales.length||Object.keys(legacy.faces).length||Object.keys(legacy.dailyReports).length?legacy:clean(initial);
+    if(!source.employees.length&&!source.attendance.length&&!source.sales.length&&!Object.keys(source.faces).length&&!Object.keys(source.dailyReports).length)return current;
+    await writeStateRecords(source);
     return readCloud();
   }
-
-  async function pushState(local){
-    await initFirebase();
-    const cloud=await readCloud(),l=clean(local);
-    const merged={
-      employees:mergeArrays(cloud.employees,l.employees,e=>idOf(e,e?.id)),
-      attendance:mergeArrays(cloud.attendance,l.attendance,e=>idOf(e,`${e?.employeeId}|${e?.date}|${e?.clockIn||''}|${e?.clockOut||''}`)),
-      sales:mergeArrays(cloud.sales,l.sales,e=>idOf(e,`${e?.date}|${e?.time}|${e?.employeeId}|${e?.amount}|${e?.note||''}`)),
-      faces:Object.assign({},cloud.faces,l.faces),
-      faceUpdatedAt:Object.assign({},cloud.faceUpdatedAt,l.faceUpdatedAt),
-      dailyReports:Object.assign({},cloud.dailyReports,l.dailyReports),
-      lastFaceCapture:l.lastFaceCapture||cloud.lastFaceCapture||null
-    };
-    if(isAdmin()){
-      await Promise.all([
-        db.doc('bigguys/public').set({employees:merged.employees,faces:firestoreSafeFaces(merged.faces),faceUpdatedAt:merged.faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
-        db.doc('bigguys/attendance').set({attendance:merged.attendance,lastFaceCapture:merged.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
-        db.doc('bigguys/business').set({sales:merged.sales,dailyReports:merged.dailyReports,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
-      ]);
-    } else {
-      await db.doc('bigguys/attendance').set({attendance:merged.attendance,lastFaceCapture:merged.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-    }
-    const fresh=await readCloud(); status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null}); return fresh;
+  async function writeStateRecords(s){
+    const batch=db.batch(),stamp=firebase.firestore.FieldValue.serverTimestamp();
+    for(const e of s.employees||[]){if(!e?.id)continue;batch.set(db.doc(`${C.employees}/${e.id}`),{...e,updatedAt:stamp},{merge:true});}
+    for(const a of s.attendance||[]){if(!a?.id)continue;batch.set(db.doc(`${C.attendance}/${a.id}`),{...a,updatedAt:stamp},{merge:true});}
+    for(const sale of s.sales||[]){if(!sale?.id)continue;batch.set(db.doc(`${C.sales}/${sale.id}`),{...sale,updatedAt:stamp},{merge:true});}
+    for(const [date,r] of Object.entries(s.dailyReports||{})){batch.set(db.doc(`${C.reports}/${date}`),{...r,date,updatedAt:stamp},{merge:true});}
+    for(const [id,vals] of Object.entries(s.faces||{})){const samples=normalizeFaceRecord(vals);if(samples.length)batch.set(db.doc(`${C.faces}/${id}`),{employeeId:id,samples:samples.map(values=>({values})),updatedAtISO:s.faceUpdatedAt?.[id]||new Date().toISOString(),updatedAt:stamp},{merge:true});}
+    await batch.commit();
+    if(s.lastFaceCapture)await db.doc('bigguys_meta/attendance').set({lastFaceCapture:s.lastFaceCapture,updatedAt:stamp},{merge:true});
   }
-
-  async function saveEmployee(employee){
-    await initFirebase(); if(!isAdmin())throw new Error('Admin authentication required.');
-    const ref=db.doc('bigguys/public');
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(ref),d=snap.exists?snap.data()||{}:{};
-      const employees=Array.isArray(d.employees)?d.employees.slice():[];
-      const i=employees.findIndex(e=>String(e.id)===String(employee.id));
-      if(i>=0)employees[i]={...employees[i],...employee,_updatedAt:new Date().toISOString()}; else employees.push({...employee,_updatedAt:new Date().toISOString()});
-      tx.set(ref,{employees,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-    });
-    return readCloud();
-  }
-
-  function serializeFaceSamples(samples){
-    if(!Array.isArray(samples)||samples.length<5)throw new Error('invalid-argument: at least 5 face samples are required.');
-    const out=samples.map((sample,si)=>{
-      const arr=Array.from(sample||[]);
-      if(arr.length!==128)throw new Error(`invalid-argument: face sample ${si+1} must contain 128 values.`);
-      return arr.map((n,ni)=>{
-        const v=Number(n);
-        if(!Number.isFinite(v))throw new Error(`invalid-argument: face sample ${si+1}, value ${ni+1} is not a finite number.`);
-        return v;
-      });
-    });
-    return out;
-  }
+  async function pushState(local){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');await writeStateRecords(clean(local));const fresh=await readCloud();status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return fresh;}
+  async function saveEmployee(employee){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!employee?.id)throw new Error('invalid-argument: employee ID is missing.');await db.doc(`${C.employees}/${employee.id}`).set({...employee,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
+  function serializeFaceSamples(samples){if(!Array.isArray(samples)||samples.length<5)throw new Error('invalid-argument: at least 5 face samples are required.');return samples.map((sample,i)=>{const a=Array.from(sample||[]);if(a.length!==128)throw new Error(`invalid-argument: face sample ${i+1} must contain 128 values.`);return a.map((n,j)=>{const v=Number(n);if(!Number.isFinite(v))throw new Error(`invalid-argument: face sample ${i+1}, value ${j+1} is not a finite number.`);return v;});});}
   async function saveFaceEnrollment(employeeId,samples){
-    await initFirebase();
-    if(!isAdmin())throw new Error('unauthenticated: Admin authentication required.');
-    if(!employeeId)throw new Error('invalid-argument: employee ID is missing.');
-    const serialized=serializeFaceSamples(samples);
-    const ref=db.doc('bigguys/public');
-    const now=new Date().toISOString();
-    // Read current cloud document, merge only the face record, then write a plain JSON-safe payload.
-    // This avoids transaction argument/serialization issues with face-api typed arrays and stale local state.
-    const snap=await ref.get();
-    const d=snap.exists?(snap.data()||{}):{};
-    const faces=d.faces&&typeof d.faces==='object'&&!Array.isArray(d.faces)?{...d.faces}:{};
-    const faceUpdatedAt=d.faceUpdatedAt&&typeof d.faceUpdatedAt==='object'&&!Array.isArray(d.faceUpdatedAt)?{...d.faceUpdatedAt}:{};
-    faces[String(employeeId)]=serialized.map(values=>({values}));
-    faceUpdatedAt[String(employeeId)]=now;
-    await ref.set({faces:faces,faceUpdatedAt:faceUpdatedAt,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-    const verify=await ref.get();
-    if(!verify.exists)throw new Error('failed-precondition: Firestore document was not created.');
-    const saved=verify.data()||{};
-    const savedSamples=saved.faces?.[String(employeeId)];
-    if(!Array.isArray(savedSamples)||savedSamples.length<5||savedSamples.some(x=>!x||typeof x!=='object'||!Array.isArray(x.values)||x.values.length!==128))
-      throw new Error('failed-precondition: Firestore did not confirm the saved face enrollment.');
-    const fresh=await readCloud();
-    return fresh;
-  }
-
-  async function saveSale(sale){
-    await initFirebase(); if(!isAdmin())throw new Error('Admin authentication required.');
-    const ref=db.doc('bigguys/business');
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(ref),d=snap.exists?(snap.data()||{}):{};
-      const sales=Array.isArray(d.sales)?d.sales.slice():[];
-      const i=sales.findIndex(x=>String(x.id)===String(sale.id));
-      if(i>=0)sales[i]={...sales[i],...sale,_updatedAt:new Date().toISOString()}; else sales.push({...sale,_updatedAt:new Date().toISOString()});
-      tx.set(ref,{sales,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-    });
+    await initFirebase();if(!isAdmin())throw new Error('unauthenticated: Admin authentication required.');if(!employeeId)throw new Error('invalid-argument: employee ID is missing.');
+    const serialized=serializeFaceSamples(samples);const ref=db.doc(`${C.faces}/${employeeId}`);const now=new Date().toISOString();
+    await ref.set({employeeId:String(employeeId),samples:serialized.map(values=>({values})),updatedAtISO:now,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    const verify=await ref.get();const saved=verify.exists?(verify.data()||{}):{};const ok=Array.isArray(saved.samples)&&saved.samples.length>=5&&saved.samples.every(x=>x&&Array.isArray(x.values)&&x.values.length===128);
+    if(!ok)throw new Error('failed-precondition: Firestore did not confirm the saved face enrollment.');
     return readCloud();
   }
-
-  async function saveAttendance(record,snapshot){
-    await initFirebase();
-    const ref=db.doc('bigguys/attendance');
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(ref),d=snap.exists?(snap.data()||{}):{};
-      const attendance=Array.isArray(d.attendance)?d.attendance.slice():[];
-      if(record){
-        const i=attendance.findIndex(x=>String(x.id)===String(record.id));
-        if(i>=0)attendance[i]={...attendance[i],...record,_updatedAt:new Date().toISOString()}; else attendance.push({...record,_updatedAt:new Date().toISOString()});
-      }
-      const patch={attendance,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
-      if(snapshot)patch.lastFaceCapture=snapshot;
-      tx.set(ref,patch,{merge:true});
-    });
-    return readCloud();
-  }
-
-  async function saveDailyReport(date,report){
-    await initFirebase(); if(!isAdmin())throw new Error('Admin authentication required.');
-    const ref=db.doc('bigguys/business');
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(ref),d=snap.exists?(snap.data()||{}):{};
-      const reports=d.dailyReports&&typeof d.dailyReports==='object'?{...d.dailyReports}:{};
-      reports[date]={...report,_updatedAt:new Date().toISOString()};
-      tx.set(ref,{dailyReports:reports,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-    });
-    return readCloud();
-  }
-
+  async function saveSale(sale){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!sale?.id)throw new Error('invalid-argument: sale ID is missing.');await db.doc(`${C.sales}/${sale.id}`).set({...sale,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
+  async function saveAttendance(record,snapshot){await initFirebase();if(!record?.employeeId)throw new Error('invalid-argument: employee ID is missing.');if(!record.id){record={...record,id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`)};}await db.doc(`${C.attendance}/${record.id}`).set({...record,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(snapshot)await db.doc('bigguys_meta/attendance').set({lastFaceCapture:snapshot,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
+  async function saveDailyReport(date,report){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');await db.doc(`${C.reports}/${date}`).set({...report,date,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   function startListeners(onRemote){
-    const refs=[db.doc('bigguys/public'),db.doc('bigguys/attendance')]; if(isAdmin())refs.push(db.doc('bigguys/business'));
+    const refs=[db.collection(C.employees),db.collection(C.faces),db.collection(C.attendance)];if(isAdmin()){refs.push(db.collection(C.sales),db.collection(C.reports));}
     const apply=async()=>{try{const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});}catch(e){status({ready:true,status:'error',lastSyncError:e,error:e});}};
     refs.forEach(ref=>unsubscribers.push(ref.onSnapshot(apply,e=>status({ready:true,status:'error',lastSyncError:e,error:e}))));
+    unsubscribers.push(db.doc('bigguys_meta/attendance').onSnapshot(apply,e=>{}));
   }
-  function startCentralRefresh(onRemote){
-    if(refreshTimer||!isAdmin())return;
-    const refresh=async()=>{try{const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});}catch(e){status({ready:true,status:'error',lastSyncError:e,error:e});}};
-    refreshTimer=setInterval(refresh,5000); window.addEventListener('online',refresh); document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
-  }
+  function startCentralRefresh(onRemote){if(refreshTimer||!isAdmin())return;const refresh=async()=>{try{const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});}catch(e){status({ready:true,status:'error',lastSyncError:e,error:e});}};refreshTimer=setInterval(refresh,10000);window.addEventListener('online',refresh);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});}
   async function init(initial,onRemote,mode='dtr'){
-    if(!configured){status({ready:false,status:'not-configured'});return false;}
-    if(readyPromise)return readyPromise;
-    readyPromise=(async()=>{try{await initFirebase();await ensureAuth(mode);let next=await readCloud();
-      if(isAdmin()&&emptyState(next)&&!emptyState(clean(initial)))next=await migrateLocalIfCloudEmpty(initial);
-      window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);startListeners(onRemote);startCentralRefresh(onRemote);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return true;
-    }catch(e){status({ready:false,status:'error',error:e,lastSyncError:e});console.error('Firebase initialization failed:',e);return false;}})();
-    return readyPromise;
+    if(!configured){status({ready:false,status:'not-configured'});return false;}if(readyPromise)return readyPromise;
+    readyPromise=(async()=>{try{await initFirebase();await ensureAuth(mode);let next=await migrateLegacyIfNeeded(initial);window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);startListeners(onRemote);startCentralRefresh(onRemote);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return true;}catch(e){status({ready:false,status:'error',error:e,lastSyncError:e});console.error('Firebase initialization failed:',e);return false;}})();return readyPromise;
   }
   async function getAdminProfile(user){await initFirebase();const u=user||auth?.currentUser;if(!u||u.isAnonymous)throw new Error('Admin authentication required.');const s=await db.doc(`admins/${u.uid}`).get();if(!s.exists)throw new Error('Admin profile not found in Firestore.');const p=s.data()||{};if(p.role!=='admin'||p.active!==true)throw new Error('This Firebase account is not an active administrator.');return {uid:u.uid,...p};}
   async function adminLogin(email,password){await initFirebase();const user=(await auth.signInWithEmailAndPassword(email,password)).user;if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');await getAdminProfile(user);readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];return user;}
-  async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;status({ready:false,status:'signed-out'});}
-  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,adminLogin,adminLogout,getAdminProfile,push:pushState,saveEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
-  status({configured,ready:false,status:configured?'waiting':'not-configured'});
+  async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;}
+  async function getAdminProfilePublic(){return getAdminProfile();}
+  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,saveEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
 })();
