@@ -53,7 +53,7 @@
     let lastFaceCapture=null;
     // Lightweight latest capture is optional and deliberately kept separate from history.
     try{const latest=await db.doc('bigguys_meta/attendance').get();if(latest.exists)lastFaceCapture=latest.data()?.lastFaceCapture||null;}catch(e){}
-    return clean({employees:employees.map(x=>{const y={...x};if(!y.id)y.id=x.id;return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
+    return clean({employees:employees.map(x=>{const y={...x};if(!y.id)y.id=x.id;const enrolled=faceMap[String(y.id)]?.length>=5||y.faceEnrolled===true;y.faceEnrolled=!!enrolled;if(enrolled)y.faceSampleCount=faceMap[String(y.id)]?.length||Number(y.faceSampleCount||5);return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
   }
   async function migrateLegacyIfNeeded(initial){
     if(!isAdmin())return readCloud();
@@ -119,8 +119,14 @@
   async function saveFaceEnrollment(employeeId,samples){
     await initFirebase();if(!isAdmin())throw new Error('unauthenticated: Admin authentication required.');if(!employeeId)throw new Error('invalid-argument: employee ID is missing.');
     const serialized=serializeFaceSamples(samples);const ref=db.doc(`${C.faces}/${employeeId}`);const now=new Date().toISOString();
-    await ref.set({employeeId:String(employeeId),samples:serialized.map(values=>({values})),updatedAtISO:now,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-    const verify=await ref.get();const saved=verify.exists?(verify.data()||{}):{};const ok=Array.isArray(saved.samples)&&saved.samples.length>=5&&saved.samples.every(x=>x&&Array.isArray(x.values)&&x.values.length===128);
+    const batch=db.batch();
+    batch.set(ref,{employeeId:String(employeeId),samples:serialized.map(values=>({values})),updatedAtISO:now,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    const employeeRef=db.doc(`${C.employees}/${employeeId}`);
+    batch.set(employeeRef,{faceEnrolled:true,faceSampleCount:serialized.length,faceUpdatedAt:now,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    await batch.commit();
+    const [verify,employeeVerify]=await Promise.all([ref.get(),employeeRef.get()]);
+    const saved=verify.exists?(verify.data()||{}):{};const emp=employeeVerify.exists?(employeeVerify.data()||{}):{};
+    const ok=Array.isArray(saved.samples)&&saved.samples.length>=5&&saved.samples.every(x=>x&&Array.isArray(x.values)&&x.values.length===128)&&emp.faceEnrolled===true;
     if(!ok)throw new Error('failed-precondition: Firestore did not confirm the saved face enrollment.');
     return readCloud();
   }

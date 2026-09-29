@@ -367,7 +367,8 @@ async function runAutoEnrollment(){
          state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==='object'?state.faceUpdatedAt:{};
          state.faceUpdatedAt[id]=new Date().toISOString();
          cacheState();
-         confirmed=Array.isArray(state.faces?.[id])&&state.faces[id].length>=5;
+         const enrolledEmployee=state.employees.find(e=>String(e.id)===String(id));
+         confirmed=Array.isArray(state.faces?.[id])&&state.faces[id].length>=5&&enrolledEmployee?.faceEnrolled===true;
          if(!confirmed)throw new Error('Firebase returned without confirming the enrolled face.');
        }catch(err){lastErr=err;if(attempt<5)await new Promise(r=>setTimeout(r,500*attempt));}
      }
