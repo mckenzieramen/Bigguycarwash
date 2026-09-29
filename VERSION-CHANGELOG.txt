@@ -58,3 +58,15 @@ V35 — DTR Attendance Sign-In Status Fix
 - Attendance save is awaited and failures no longer show a false successful record.
 - Face-capture snapshots no longer create fake attendance records with null clock-in/out times.
 - Existing navigation, enrollment, employee IDs, delete, payroll, sales, and other baseline features preserved.
+
+V36 — DTR Time In/Time Out + Employee DTR Profile (2026-09-29)
+- Based exactly on the uploaded V35 baseline.
+- TIME IN and TIME OUT remain manual actions after face recognition; recognition itself does not create attendance.
+- Successful TIME IN/TIME OUT now records the visible time plus an exact ISO timestamp in Firebase (`clockInAt` / `clockOutAt`).
+- Added browser voice confirmation after Firebase attendance save: “Time in recorded” / “Time out recorded.”
+- Prevented double-click/race recording while an attendance save is in progress.
+- Admin DTR / Attendance now has an employee selector and a dedicated employee DTR profile.
+- Selecting an employee shows Time In, Time Out, Hours, Sales, Commission %, Commission amount, status, employment type, schedule, total sales, and total completed hours.
+- Today's Attendance table now also shows Time In, Time Out, Hours, Sales, Commission %, and Commission amount.
+- Added print DTR action and responsive premium dark styling for the employee DTR profile.
+- Preserved existing face enrollment, recognition, Firebase structure, employee IDs, deletion, payroll, sales, dashboard, and navigation.

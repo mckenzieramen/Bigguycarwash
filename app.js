@@ -1,7 +1,7 @@
 const KEY="bigguys_dtr_v2";
 const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
-let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false;
+let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false, recordBusy=false;
 const $=id=>document.getElementById(id);
 const cacheState=()=>{const c={...state,faces:{},lastFaceCapture:null};try{localStorage.setItem(KEY,JSON.stringify(c));}catch(e){console.warn("Local cache skipped:",e);}};
 const save=()=>{cacheState(); if(window.BIGGUYS_CLOUD?.ready) window.BigGuysCloud.push(state).catch(console.warn);};
@@ -9,7 +9,7 @@ const LAST_CAPTURE_KEY="bigguys_last_face_capture";
 const CAPTURE_HOLD_MS=500;
 let attendanceCooldownUntil=0;
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
-const timeNow=()=>new Date().toTimeString().slice(0,5);
+const timeNow=()=>new Date().toTimeString().slice(0,8);
 const minutes=t=>{const [h,m]=t.split(":").map(Number);return h*60+m};
 function tick(){const n=new Date();$("liveTime").textContent=n.toLocaleTimeString("en-PH",{hour12:true});$("liveDate").textContent=n.toLocaleDateString("en-PH",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
 setInterval(tick,1000);tick();
@@ -162,45 +162,61 @@ function clearAfterAttendance(message){
  setOval("bad");
  $("cameraStatus").textContent=message||"🔴 Ready — place the next face inside the oval.";
 }
+function speakAttendance(message){
+ try{
+  if("speechSynthesis" in window){window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(message);u.lang="en-US";u.rate=.92;u.pitch=1;window.speechSynthesis.speak(u);}
+ }catch(e){console.warn("Voice confirmation unavailable:",e)}
+}
 async function record(type){
+ if(recordBusy)return;
  if(!recognizedEmployee){$("result").innerHTML='<div class="result late-result">Face not recognized.</div>';return}
  const employee=recognizedEmployee;
- const date=today(),now=timeNow();
+ const date=today(), nowDate=new Date(), now=timeNow(), iso=nowDate.toISOString();
  let attendance=(state.attendance||[]).find(a=>String(a.employeeId)===String(employee.id)&&a.date===date&&(a.clockIn||a.clockOut));
+ recordBusy=true;
+ $("timeIn").disabled=true; $("timeOut").disabled=true;
  try{
   if(type==="in"){
    if(attendance){
     updateAttendanceControls(employee);
     $("result").innerHTML=`<div class="result late-result">ALREADY SIGNED IN<br><br>${employee.name}<br>TIME IN: ${attendance.clockIn||"—"}</div>`;
     clearAfterAttendance("🔴 Already signed in — scan again for another employee.");
+    recordBusy=false;
     return;
    }
    const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
-   attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockOut:null,status};
+   attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockInAt:iso,clockOut:null,clockOutAt:null,status};
    if(window.BigGuysCloud?.saveAttendance){ state=await window.BigGuysCloud.saveAttendance(attendance); cacheState(); } else { state.attendance=state.attendance||[]; state.attendance.push(attendance); save(); }
    const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
    $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
+   speakAttendance(`Time in recorded for ${employee.name}. ${now}.`);
   }else{
    if(!attendance){
     $("result").innerHTML='<div class="result late-result">NOT SIGNED IN — TIME IN must be recorded first.</div>';
     clearAfterAttendance("🔴 Not signed in — scan again and choose TIME IN first.");
+    recordBusy=false;
     return;
    }
    if(attendance.clockOut){
     $("result").innerHTML=`<div class="result late-result">ALREADY SIGNED OUT<br><br>${employee.name}<br>TIME OUT: ${attendance.clockOut}</div>`;
     clearAfterAttendance("🔴 Already signed out — scanning for the next employee…");
+    recordBusy=false;
     return;
    }
    attendance.clockOut=now;
+   attendance.clockOutAt=iso;
    if(window.BigGuysCloud?.saveAttendance){ state=await window.BigGuysCloud.saveAttendance(attendance); cacheState(); } else save();
    $("result").innerHTML=`<div class="result success">✓ TIME OUT RECORDED<br><br>${employee.name}<br>${now}</div>`;
+   speakAttendance(`Time out recorded for ${employee.name}. ${now}.`);
   }
  }catch(err){
   console.error("Attendance save failed:",err);
   $("result").innerHTML=`<div class="result late-result">ATTENDANCE WAS NOT SAVED<br><br>${err?.code||err?.message||err}</div>`;
   updateAttendanceControls(employee);
+  recordBusy=false;
   return;
  }
+ recordBusy=false;
  clearAfterAttendance("🔴 Attendance saved — scanning for the next employee…");
 }
 $("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");async function initCloud(){

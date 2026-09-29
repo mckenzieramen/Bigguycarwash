@@ -9,6 +9,7 @@ state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?s
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
 let attendanceCaptureDisplayedKey=null;
+let selectedDtrEmployeeId="";
 let attendanceCaptureHideTimer=null;
 const $=id=>document.getElementById(id);
 const cacheState=()=>{const c={...state,faces:{},faceUpdatedAt:{},lastFaceCapture:null};try{localStorage.setItem(KEY,JSON.stringify(c));}catch(e){console.warn("Local cache skipped:",e);}};
@@ -152,11 +153,12 @@ function refresh(){
  if($("payrollTotal"))$("payrollTotal").textContent=money(state.employees.reduce((t,e)=>t+pay(e,d),0));
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*commRate(a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
- $("attendanceTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);return[e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",statusBadge(a?.status||"awol")]}),["ID","Employee","Scheduled","Clock In","Clock Out","Status"]);
+ $("attendanceTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);const rate=commRate(a?.status||"awol");return[e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(a?.status||"awol"),money(sales),`${Math.round(rate*100)}%`,money(sales*rate)]}),["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission"]);
  $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
+ refreshDtrSelector();
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  $("payrollTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[e.name,e.type,a?.status||"AWOL",money(sales),a?((commRate(a.status)*100)+"%"):"30%",money(pay(e,d))]}),["Employee","Type","Status","Sales","Commission","Daily Pay"]);
@@ -430,6 +432,42 @@ $("retryEnrollment").onclick=async()=>{setEnrollmentRetryVisible(false);if(!enro
 $("closeEnrollmentModal").onclick=closeEnrollmentModal;
 $("enrollmentModal")?.querySelector('.enrollment-modal-backdrop')?.addEventListener('click',()=>{if(!enrollmentRunning)closeEnrollmentModal();});
 
+function dtrMinutes(a){
+ const start=a?.clockInAt?new Date(a.clockInAt):null, end=a?.clockOutAt?new Date(a.clockOutAt):null;
+ if(start&&end&&!Number.isNaN(start.getTime())&&!Number.isNaN(end.getTime()))return Math.max(0,(end-start)/60000);
+ if(a?.clockIn&&a?.clockOut){const [h1,m1,s1=0]=a.clockIn.split(":").map(Number),[h2,m2,s2=0]=a.clockOut.split(":").map(Number);return Math.max(0,(h2*60+m2+s2/60)-(h1*60+m1+s1/60));}
+ return null;
+}
+function dtrHours(a){const mins=dtrMinutes(a);return mins==null?"—":(mins/60).toFixed(2)+" hrs";}
+function renderEmployeeDtr(id){
+ const box=$("employeeDtrProfile"); if(!box)return;
+ const e=state.employees.find(x=>String(x.id)===String(id));
+ if(!e){box.className="employee-dtr-profile empty-dtr";box.innerHTML='<div class="dtr-empty-icon">◷</div><h3>Select an employee</h3><p class="muted">The employee\'s DTR details will appear here.</p>';return;}
+ selectedDtrEmployeeId=e.id;
+ const rows=state.attendance.filter(a=>String(a.employeeId)===String(e.id)).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.clockInAt||b.clockIn||"").localeCompare(a.clockInAt||a.clockIn||""));
+ const totalSales=state.sales.filter(x=>String(x.employeeId)===String(e.id)).reduce((t,x)=>t+Number(x.amount||0),0);
+ const completed=rows.filter(a=>a.clockIn&&a.clockOut); const totalMinutes=completed.reduce((t,a)=>t+(dtrMinutes(a)||0),0);
+ const todayRecord=rows.find(a=>a.date===today()); const todaySales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===today()).reduce((t,x)=>t+Number(x.amount||0),0);
+ const rate=commRate(todayRecord?.status||"awol");
+ const commission=todaySales*rate;
+ const type=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";
+ const history=rows.length?rows.map(a=>{
+   const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
+   const r=commRate(a.status||"awol");
+   return [dateLabel(a.date),e.start||"—",a.clockIn||"—",a.clockOut||"—",dtrHours(a),money(sales),`${Math.round(r*100)}%`,money(sales*r),statusBadge(a.status||"awol")];
+ }):[];
+ box.className="employee-dtr-profile";
+ box.innerHTML=`<div class="dtr-employee-header"><div class="dtr-avatar">${(e.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div class="dtr-employee-main"><span class="section-kicker">EMPLOYEE DTR PROFILE</span><h3>${e.name}</h3><p>${e.id} · ${type} · Schedule ${e.start||"—"}</p></div><button type="button" class="dtr-print" onclick="window.print()">PRINT DTR</button></div>
+ <div class="dtr-kpi-grid"><div class="dtr-kpi"><span>TIME IN TODAY</span><b>${todayRecord?.clockIn||"—"}</b><small>${todayRecord?statusBadge(todayRecord.status||"awol"):"No record yet"}</small></div><div class="dtr-kpi"><span>TIME OUT TODAY</span><b>${todayRecord?.clockOut||"—"}</b><small>${todayRecord?.clockOut?dtrHours(todayRecord):"Pending"}</small></div><div class="dtr-kpi"><span>TODAY'S SALES</span><b>${money(todaySales)}</b><small>Commission ${Math.round(rate*100)}%</small></div><div class="dtr-kpi"><span>TOTAL SALES</span><b>${money(totalSales)}</b><small>${rows.length} attendance record${rows.length===1?"":"s"}</small></div><div class="dtr-kpi"><span>TOTAL HOURS</span><b>${(totalMinutes/60).toFixed(2)}</b><small>Completed shifts</small></div><div class="dtr-kpi"><span>TODAY COMMISSION</span><b>${money(commission)}</b><small>${Math.round(rate*100)}% of today's sales</small></div></div>
+ <div class="dtr-table-wrap">${history.length?table(history,["DATE","SCHEDULE","TIME IN","TIME OUT","HOURS","SALES","COMMISSION %","COMMISSION","STATUS"]):'<p class="muted dtr-no-records">No DTR history for this employee yet.</p>'}</div>`;
+}
+function refreshDtrSelector(){
+ const select=$("dtrEmployeeSelect"); if(!select)return;
+ const current=selectedDtrEmployeeId||select.value||"";
+ select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${e.name} — ${e.id}</option>`).join("");
+ if(state.employees.some(e=>String(e.id)===String(current))){select.value=current;renderEmployeeDtr(current);}else{select.value="";selectedDtrEmployeeId="";renderEmployeeDtr("");}
+}
+
 function showEmployeeHistory(id){
  const e=state.employees.find(x=>x.id===id);
  if(!e)return;
@@ -537,6 +575,7 @@ function makeReport(mode){
  const empty=!rows.length?'<p class="muted">No sales or reconciliation records for the selected period.</p>':table(rows,[mode==="monthly"?"MONTH":"YEAR","TOTAL SALES","CASH","EXPENSES","CASH REMITTED","SHORT","OVER","PAYROLL","NET AFTER PAYROLL"]);
  $("reportOutput").innerHTML=`<div class="report-box"><h3>${mode.toUpperCase()} SALES REPORT</h3><p class="muted">${mode==="monthly"?`Monthly summary for ${prefix}`:`Yearly summary for ${prefix}`}</p>${empty}</div>`;
 }
+$("dtrEmployeeSelect")?.addEventListener("change",e=>{selectedDtrEmployeeId=e.target.value||"";renderEmployeeDtr(selectedDtrEmployeeId);});
 $("reportDate").value=today();
 $("reportDate").addEventListener("change",loadDailyReportInputs);
 $("saveDailyReport").onclick=saveDailyReport;
