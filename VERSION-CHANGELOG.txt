@@ -8,3 +8,5 @@ V20 — scalable central storage fix
 - Preserved existing Firebase Auth, DTR, payroll, sales, dashboard, and face recognition flows.
 
 V23 - Atomic employee ID sequence: central Firestore transaction reserves YYYYMM sequence, preventing duplicate IDs across devices and continuing sequence after deletions.
+
+V24 — DELETE FIX: Employee deletion now removes central employee, face, attendance, and sales records; legacy migration is marked complete so deleted records are not resurrected.

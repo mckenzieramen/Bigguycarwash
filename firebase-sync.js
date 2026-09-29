@@ -58,13 +58,16 @@
   async function migrateLegacyIfNeeded(initial){
     if(!isAdmin())return readCloud();
     const current=await readCloud();
+    let migrationDone=false;
+    try{const marker=await db.doc('bigguys_meta/migration').get();migrationDone=marker.exists&&marker.data()?.legacyMigrated===true;}catch(e){}
     const hasNew=current.employees.length||current.attendance.length||current.sales.length||Object.keys(current.faces).length||Object.keys(current.dailyReports).length;
-    if(hasNew)return current;
+    if(hasNew||migrationDone)return current;
     const [p,a,b]=await Promise.all([getDocSafe('bigguys/public'),getDocSafe('bigguys/attendance'),getDocSafe('bigguys/business')]);
     const legacy=clean({employees:p.employees,faces:p.faces,faceUpdatedAt:p.faceUpdatedAt,attendance:a.attendance,sales:b.sales,dailyReports:b.dailyReports,lastFaceCapture:a.lastFaceCapture});
     const source=legacy.employees.length||legacy.attendance.length||legacy.sales.length||Object.keys(legacy.faces).length||Object.keys(legacy.dailyReports).length?legacy:clean(initial);
     if(!source.employees.length&&!source.attendance.length&&!source.sales.length&&!Object.keys(source.faces).length&&!Object.keys(source.dailyReports).length)return current;
     await writeStateRecords(source);
+    await db.doc('bigguys_meta/migration').set({legacyMigrated:true,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     return readCloud();
   }
   async function writeStateRecords(s){
@@ -98,6 +101,19 @@
     });
     return prefix+String(reserved).padStart(2,'0');
   }
+  async function deleteEmployee(employeeId){
+    await initFirebase();
+    if(!isAdmin())throw new Error('Admin authentication required.');
+    if(!employeeId)throw new Error('invalid-argument: employee ID is missing.');
+    const batch=db.batch();
+    batch.delete(db.doc(`${C.employees}/${employeeId}`));
+    batch.delete(db.doc(`${C.faces}/${employeeId}`));
+    const [attendance,sales]=await Promise.all([getAll(C.attendance),getAll(C.sales)]);
+    attendance.filter(r=>String(r.employeeId)===String(employeeId)).forEach(r=>batch.delete(db.doc(`${C.attendance}/${r.id}`)));
+    sales.filter(r=>String(r.employeeId)===String(employeeId)).forEach(r=>batch.delete(db.doc(`${C.sales}/${r.id}`)));
+    await batch.commit();
+    return readCloud();
+  }
   async function saveEmployee(employee){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!employee?.id)throw new Error('invalid-argument: employee ID is missing.');await db.doc(`${C.employees}/${employee.id}`).set({...employee,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   function serializeFaceSamples(samples){if(!Array.isArray(samples)||samples.length<5)throw new Error('invalid-argument: at least 5 face samples are required.');return samples.map((sample,i)=>{const a=Array.from(sample||[]);if(a.length!==128)throw new Error(`invalid-argument: face sample ${i+1} must contain 128 values.`);return a.map((n,j)=>{const v=Number(n);if(!Number.isFinite(v))throw new Error(`invalid-argument: face sample ${i+1}, value ${j+1} is not a finite number.`);return v;});});}
   async function saveFaceEnrollment(employeeId,samples){
@@ -126,5 +142,5 @@
   async function adminLogin(email,password){await initFirebase();const user=(await auth.signInWithEmailAndPassword(email,password)).user;if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');await getAdminProfile(user);readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];return user;}
   async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;}
   async function getAdminProfilePublic(){return getAdminProfile();}
-  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
+  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,deleteEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
 })();

@@ -433,12 +433,22 @@ function deleteEmployee(id){
  if(!employee)return;
  const ok=confirm(`Delete employee ${employee.name} (${employee.id})?\n\nThis will also delete the employee's enrolled face, attendance records, and sales records from this browser.`);
  if(!ok)return;
- state.employees=state.employees.filter(e=>e.id!==id);
- state.attendance=state.attendance.filter(a=>a.employeeId!==id);
- state.sales=state.sales.filter(s=>s.employeeId!==id);
- delete state.faces[id];
- save();
- refresh();
+ try{
+   if(window.BigGuysCloud?.deleteEmployee){
+     state=await window.BigGuysCloud.deleteEmployee(id);
+   }else{
+     state.employees=state.employees.filter(e=>e.id!==id);
+     state.attendance=state.attendance.filter(a=>a.employeeId!==id);
+     state.sales=state.sales.filter(s=>s.employeeId!==id);
+     delete state.faces[id];
+     await save();
+   }
+   cacheState();
+   refresh();
+ }catch(err){
+   console.error('Employee delete failed:',err);
+   alert(`Employee could not be deleted from Firebase: ${err?.code||err?.message||err}`);
+ }
 }
 
 function reportDates(){
