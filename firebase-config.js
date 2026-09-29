@@ -1,6 +1,6 @@
 /* Big Guy's Carwash Firebase Web App configuration. */
 window.BIGGUYS_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyD7HgrVLhocrvCoKSS2Pe4kHQleLCLbS6I",
+  apiKey: "AIzaSyAvTo4ieD6x1RK5WrFgGq7STjEQjHbh7dE",
   authDomain: "big-guys-carwash.firebaseapp.com",
   projectId: "big-guys-carwash",
   storageBucket: "big-guys-carwash.firebasestorage.app",
