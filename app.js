@@ -1,7 +1,7 @@
 const KEY="bigguys_dtr_v2";
 const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
-let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false, recordBusy=false, recognitionToastTimer=null;
+let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false, recordBusy=false, recognitionToastTimer=null, nextRecognitionAt=0;
 const $=id=>document.getElementById(id);
 const cacheState=()=>{const c={...state,faces:{},lastFaceCapture:null};try{localStorage.setItem(KEY,JSON.stringify(c));}catch(e){console.warn("Local cache skipped:",e);}};
 const save=()=>{cacheState(); if(window.BIGGUYS_CLOUD?.ready) window.BigGuysCloud.push(state).catch(console.warn);};
@@ -109,6 +109,7 @@ async function verifyFace(detection){
  const match=bestEmployee(detection.descriptor);
  if(match.employee&&match.distance<=.60){
   recognizedEmployee=match.employee;
+  nextRecognitionAt=performance.now()+2000;
   saveFaceSnapshot(match.employee,detection);
   $("employeeName").textContent=match.employee.name;
   $("employeeId").textContent=match.employee.id;
@@ -137,7 +138,7 @@ async function scanLoop(){
   if(detection){
    if(faceIsInsideOval(detection)){
     setOval("good");
-    if(!recognizedEmployee){
+    if(performance.now()>=nextRecognitionAt){
       if(!validSince)validSince=performance.now();
       const held=performance.now()-validSince;
       if(held>=CAPTURE_HOLD_MS&&!captureBusy){
@@ -150,14 +151,14 @@ async function scanLoop(){
     }
    }else{
     validSince=0;captureBusy=false;
-    if(!recognizedEmployee){setOval("bad");$("cameraStatus").textContent="🔴 Keep your face centered inside the red oval."}
+    if(performance.now()>=nextRecognitionAt){setOval("bad");$("cameraStatus").textContent="🔴 Keep your face centered inside the red oval."}
    }
   }else{
-   if(!recognizedEmployee){validSince=0;captureBusy=false;setOval("bad");$("cameraStatus").textContent="🔴 No clear face detected — place your face inside the oval."}
+   if(performance.now()>=nextRecognitionAt){validSince=0;captureBusy=false;setOval("bad");$("cameraStatus").textContent="🔴 No clear face detected — place your face inside the oval."}
   }
  }catch(err){
   console.error("Face scan error:",err);
-  if(!recognizedEmployee){setOval("bad");$("cameraStatus").textContent="Face scan is retrying…"}
+  if(performance.now()>=nextRecognitionAt){setOval("bad");$("cameraStatus").textContent="Face scan is retrying…"}
  }finally{scanning=false;setTimeout(scanLoop,120)}
 }
 function clearAfterAttendance(message){
@@ -165,7 +166,8 @@ function clearAfterAttendance(message){
  validSince=0;
  captureBusy=false;
  if(recognitionToastTimer){clearTimeout(recognitionToastTimer);recognitionToastTimer=null;}
- attendanceCooldownUntil=performance.now()+900;
+ attendanceCooldownUntil=performance.now()+300;
+ nextRecognitionAt=performance.now()+300;
  $("recognized").classList.add("hidden");
  $("timeIn").disabled=true;
  $("timeOut").disabled=true;
