@@ -89,3 +89,14 @@ V43 — Sales Overview + Connected Business Reports (2026-09-30)
 - Added custom Add Expense modal with category, description, amount, payment method, date and notes; expense items are stored in the existing daily report Firebase document structure.
 - Preserved backward compatibility with existing numeric daily expense records.
 - Added print actions while preserving existing branding.
+
+
+V44 PAYROLL UPDATE — 2026-09-30
+- Preserved existing project baseline and functionality.
+- Full Time minimum pay: ₱250/day.
+- Semi Full Time minimum pay: ₱200/day.
+- Part Time minimum pay: ₱150/day.
+- Commission: Early/On Time 40%, Late 35%, AWOL/Absent 30%.
+- Actual daily pay uses the higher of commission earnings or the applicable minimum pay.
+- Payroll table now displays Commission %, Commission, Minimum Pay, and Daily Pay.
+- Only admin.js and admin.html were changed for this request.

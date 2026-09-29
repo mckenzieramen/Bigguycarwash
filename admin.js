@@ -76,7 +76,7 @@ function updateEmployeeIdPreview(){
  if(input)input.value=date?nextEmployeeId(date):"";
 }
 const baseRate=t=>t==="full"?250:t==="semi"?200:150;
-const commRate=s=>s==="late"?.35:s==="awol"?.30:.40;
+const commRate=s=>{const v=String(s||"awol").toLowerCase().replace(/[\s_-]+/g,"");if(v==="late")return .35;if(v==="awol"||v==="absent")return .30;return .40;};
 function table(rows,heads){if(!rows.length)return'<p class="muted">No records yet.</p>';return`<table class="table"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
 function pay(emp,date){const a=state.attendance.find(x=>x.employeeId===emp.id&&x.date===date);if(!a)return 0;const sales=state.sales.filter(x=>x.employeeId===emp.id&&x.date===date).reduce((t,x)=>t+x.amount,0);return Math.max(baseRate(emp.type),sales*commRate(a.status))}
 function statusBadge(status){
@@ -161,7 +161,7 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  refreshDtrSelector();
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
- $("payrollTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[e.name,e.type,a?.status||"AWOL",money(sales),a?((commRate(a.status)*100)+"%"):"30%",money(pay(e,d))]}),["Employee","Type","Status","Sales","Commission","Daily Pay"]);
+ $("payrollTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);const rate=commRate(a?.status||"awol");const commission=sales*rate;const minimum=baseRate(e.type);return[e.name,e.type,a?.status||"AWOL",money(sales),`${Math.round(rate*100)}%`,money(commission),money(minimum),money(Math.max(minimum,commission))]}),["Employee","Type","Status","Sales","Commission %","Commission","Minimum Pay","Daily Pay"]);
  const top=state.employees.map(e=>({name:e.name,sales:state.sales.filter(s=>s.date===d&&s.employeeId===e.id).reduce((t,s)=>t+Number(s.amount||0),0)})).filter(x=>x.sales>0).sort((a,b)=>b.sales-a.sales);
  $("topSalesToday").innerHTML=table(top.slice(0,6).map((x,i)=>[i+1,x.name,money(x.sales)]),["#","Employee","Sales"]);
  const types={full:"Full Time",semi:"Semi Full Time",part:"Part Time"}; const counts={};state.employees.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);$("employeeTypeSummary").innerHTML=table(Object.keys(counts).map(k=>[types[k]||k,counts[k]]),["Type","Count"]);
