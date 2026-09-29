@@ -52,6 +52,11 @@ function syncStateFromStorage(){
 }
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function employeeOffDays(e){return Array.isArray(e?.offDays)?e.offDays:[];}
+function isEmployeeOff(e,date){if(!e||!date)return false;return employeeOffDays(e).includes(WEEKDAYS[new Date(date+"T00:00:00").getDay()]);}
+function attendanceDateValue(){return $("attendanceDate")?.value||today();}
+
 // Employee IDs: YYYYMM + monthly hire sequence. The sequence never reuses an
 // existing number for that month, so deleting an employee will not recycle an ID.
 // Example: first hire in September 2026 = 20260901, next = 20260902.
@@ -78,11 +83,13 @@ function updateEmployeeIdPreview(){
 const baseRate=t=>t==="full"?250:t==="semi"?200:150;
 const commRate=s=>{const v=String(s||"awol").toLowerCase().replace(/[\s_-]+/g,"");if(v==="late")return .35;if(v==="awol"||v==="absent")return .30;return .40;};
 function table(rows,heads){if(!rows.length)return'<p class="muted">No records yet.</p>';return`<table class="table"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
-function pay(emp,date){const a=state.attendance.find(x=>x.employeeId===emp.id&&x.date===date);if(!a)return 0;const sales=state.sales.filter(x=>x.employeeId===emp.id&&x.date===date).reduce((t,x)=>t+x.amount,0);return Math.max(baseRate(emp.type),sales*commRate(a.status))}
+function isWorkedAttendance(a){return !!(a&&a.clockIn&&a.status&&!["absent","awol","off"].includes(String(a.status).toLowerCase()));}
+function pay(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;const sales=state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);return Math.max(baseRate(emp.type),sales*commRate(a.status))}
+function commissionFor(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;return state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0)*commRate(a.status),0)}
 function statusBadge(status){
  const s=(status||"AWOL").toLowerCase();
  const label=s==="ontime"?"On Time":s.charAt(0).toUpperCase()+s.slice(1);
- const cls=s==="early"?"status-early":s==="late"||s==="awol"?"status-late":s==="absent"?"status-absent":"status-ontime";
+ const cls=s==="early"?"status-early":s==="late"||s==="awol"?"status-late":s==="absent"?"status-absent":s==="off"?"status-off":"status-ontime";
  return `<span class="${cls}">${label}</span>`;
 }
 function dateLabel(date){return new Date(date+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}
@@ -144,6 +151,57 @@ function refreshRightPanel(){
  const title=$("rightStatusTitle"),text=$("rightStatusText"),notice=$("rightNoticeTitle"),noticeText=$("rightNoticeText");
  if(e){const attendance=a&&a.employeeId===e.id?a:state.attendance.find(x=>x.employeeId===e.id&&x.date===d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}
 }
+function renderAttendanceAdmin(date){
+ const target=date||today();
+ if($("attendanceDate") && $("attendanceDate").value!==target)$("attendanceDate").value=target;
+ const rows=state.employees.map((e,i)=>{
+   const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===target);
+   const off=isEmployeeOff(e,target);
+   const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===target).reduce((t,x)=>t+Number(x.amount||0),0);
+   const rate=isWorkedAttendance(a)?commRate(a.status):0;
+   let status=a?.status||"awol";
+   let action="—";
+   if(off && !a) status="off";
+   else if(!a) action=`<button type="button" class="small-action mark-absent" data-id="${e.id}" data-date="${target}">MARK ABSENT</button>`;
+   return [e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(status),money(sales),`${Math.round(rate*100)}%`,money(commissionFor(e,target)),money(pay(e,target)),action];
+ });
+ $("attendanceTable").innerHTML=table(rows,["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission","Daily Pay","Action"]);
+ document.querySelectorAll(".mark-absent").forEach(btn=>btn.onclick=()=>markEmployeeAbsent(btn.dataset.id,btn.dataset.date));
+}
+async function markEmployeeAbsent(employeeId,date){
+ const e=state.employees.find(x=>String(x.id)===String(employeeId));
+ if(!e||!date)return;
+ if(isEmployeeOff(e,date)){alert(`${e.name} is scheduled OFF on ${date}.`);return;}
+ const existing=state.attendance.find(x=>String(x.employeeId)===String(employeeId)&&x.date===date);
+ if(existing?.clockIn){alert("This employee already has a Time In record for this date.");return;}
+ const record={...(existing||{}),id:existing?.id||`attendance_${String(employeeId).replace(/[^a-zA-Z0-9_-]/g,"_")}_${date}`,employeeId,date,status:"absent",punchType:"manual",markedAbsentAt:new Date().toISOString()};
+ try{
+   if(existing){
+     const idx=state.attendance.findIndex(x=>x.id===existing.id); if(idx>=0)state.attendance[idx]=record;
+   }else state.attendance.push(record);
+   if(window.BigGuysCloud?.saveAttendance)state=await window.BigGuysCloud.saveAttendance(record);else state=await save();
+   cacheState();
+   refresh();
+ }catch(err){console.error("Mark absent failed",err);alert(`Unable to mark absent: ${err?.code||err?.message||err}`);}
+}
+function renderSettings(){
+ const select=$("settingsEmployee"); if(!select)return;
+ const current=select.value;
+ select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${e.name} — ${e.id}</option>`).join("");
+ if(state.employees.some(e=>String(e.id)===String(current)))select.value=current;
+ const e=state.employees.find(x=>String(x.id)===String(select.value));
+ const wrap=$("employeeOffDays"); if(!wrap)return;
+ wrap.innerHTML=WEEKDAYS.map(day=>`<label class="off-day-option"><input type="checkbox" value="${day}" ${employeeOffDays(e).includes(day)?"checked":""}><span>${day.slice(0,3)}</span></label>`).join("");
+ $("offDaysSummary").innerHTML=e?`<strong>${e.name}</strong><span>${employeeOffDays(e).length?employeeOffDays(e).join(" • "):"No regular days off set."}</span>`:"Select an employee to configure days off.";
+}
+async function saveEmployeeOffDays(){
+ const id=$("settingsEmployee")?.value; const e=state.employees.find(x=>String(x.id)===String(id));
+ if(!e){alert("Select an employee first.");return;}
+ const offDays=[...document.querySelectorAll("#employeeOffDays input:checked")].map(x=>x.value);
+ e.offDays=offDays;
+ try{if(window.BigGuysCloud?.saveEmployee)state=await window.BigGuysCloud.saveEmployee(e);else state=await save();cacheState();renderSettings();renderAttendanceAdmin(attendanceDateValue());renderPayroll();}
+ catch(err){console.error("Days off save failed",err);alert(`Unable to save days off: ${err?.code||err?.message||err}`);}
+}
 function refresh(){
  syncStateFromStorage();
  const d=today(),ds=state.sales.filter(x=>x.date===d),totalSales=ds.reduce((t,x)=>t+Number(x.amount||0),0);
@@ -153,12 +211,13 @@ function refresh(){
  if($("payrollTotal"))$("payrollTotal").textContent=money(state.employees.reduce((t,e)=>t+pay(e,d),0));
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*commRate(a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
- $("attendanceTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);const rate=commRate(a?.status||"awol");return[e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(a?.status||"awol"),money(sales),`${Math.round(rate*100)}%`,money(sales*rate)]}),["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission"]);
+ renderAttendanceAdmin(attendanceDateValue());
  $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
+ renderSettings();
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  renderPayroll();
@@ -237,7 +296,7 @@ $("employeeForm").onsubmit=async e=>{
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
-   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate};
+   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,offDays:[]};
    state.employees.push(employee);
    cacheState();
    if(window.BigGuysCloud?.saveEmployee){
@@ -259,7 +318,7 @@ $("employeeForm").onsubmit=async e=>{
    if(btn){btn.disabled=false;btn.textContent='ADD EMPLOYEE & ENROLL FACE';}
  }
 };
-$("salesForm").onsubmit=async e=>{e.preventDefault();const now=new Date();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:now.toTimeString().slice(0,8),createdAtISO:now.toISOString(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value||0),remittance:Number($("saleRemittance").value||0),expense:Number($("saleExpense").value||0),note:$("saleNote").value.trim(),paymentMethod:"Cash"};if(sale.amount<0||sale.remittance<0||sale.expense<0){alert('Please enter valid amounts.');return;}state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}cacheState();try{await saveReportRecord(sale.date,{cash:sale.amount,expenses:totalExpensesForDate(sale.date),cashRemitted:totalRemittanceForDate(sale.date),lastSaleAtISO:sale.createdAtISO});}catch(reportErr){console.warn("Automatic report snapshot failed:",reportErr);}e.target.reset();$("saleExpense").value="0";$("salesViewDate").value=sale.date;refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
+$("salesForm").onsubmit=async e=>{e.preventDefault();const now=new Date();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:now.toTimeString().slice(0,8),createdAtISO:now.toISOString(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value||0),remittance:Number($("saleRemittance").value||0),expense:Number($("saleExpense").value||0),note:$("saleNote").value.trim(),paymentMethod:"Cash"};if(sale.amount<0||sale.remittance<0||sale.expense<0){alert('Please enter valid amounts.');return;}state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}cacheState();try{const f=dailyFinancials(sale.date);await saveReportRecord(sale.date,{cash:f.cash,expenses:f.expenses,cashRemitted:f.cashRemitted,expectedRemittance:f.expected,short:f.short,over:f.over,lastSaleAtISO:sale.createdAtISO});}catch(reportErr){console.warn("Automatic report snapshot failed:",reportErr);}e.target.reset();$("salesViewDate").value=sale.date;refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 let enrollmentRunning=false,enrollmentSamples=[];
 const ENROLL_STEPS=[
@@ -453,11 +512,11 @@ function renderPayroll(){
    let accumulated=0,days=0,totalSales=0,totalCommission=0;
    dates.forEach(date=>{
      const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===date);
-     if(!a)return;
+     if(!isWorkedAttendance(a))return;
      days++;
      const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);
-     const rate=commRate(a.status||"awol"), commission=sales*rate;
-     totalSales+=sales; totalCommission+=commission; accumulated+=Math.max(baseRate(e.type),commission);
+     const commission=commissionFor(e,date);
+     totalSales+=sales; totalCommission+=commission; accumulated+=pay(e,date);
    });
    return {e,days,totalSales,totalCommission,accumulated};
  }).sort((a,b)=>b.accumulated-a.accumulated||b.totalSales-a.totalSales);
@@ -468,14 +527,14 @@ function renderPayroll(){
  if($("payrollTable"))$("payrollTable").innerHTML=table(rows.map((r,i)=>[i+1,r.e.name,r.e.type,r.days,money(r.totalSales),money(r.totalCommission),money(r.accumulated)]),["#","Employee","Type","Days Worked","Sales","Commission","Accumulated Pay"]);
  let running={}; const daily=[];
  dates.forEach(date=>state.employees.forEach(e=>{
-   const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===date); if(!a)return;
+   const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===date); if(!isWorkedAttendance(a))return;
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);
-   const rate=commRate(a.status||"awol"), commission=sales*rate, dailyPay=Math.max(baseRate(e.type),commission);
+   const rate=commRate(a.status), commission=commissionFor(e,date), dailyPay=pay(e,date);
    running[e.id]=(running[e.id]||0)+dailyPay;
-   daily.push([date,e.name,statusBadge(a.status||"awol"),money(sales),`${Math.round(rate*100)}%`,money(dailyPay),money(running[e.id])]);
+   daily.push([date,e.name,statusBadge(a.status),money(sales),`${Math.round(rate*100)}%`,money(dailyPay),money(running[e.id])]);
  }));
  daily.sort((a,b)=>a[0].localeCompare(b[0])||a[1].localeCompare(b[1]));
- if($("payrollDailyTable"))$("payrollDailyTable").innerHTML=daily.length?table(daily,["Date","Employee","Status","Sales","Commission %","Daily Pay","Accumulated"]):'<p class="muted">No attendance/work records for this month.</p>';
+ if($("payrollDailyTable"))$("payrollDailyTable").innerHTML=daily.length?table(daily,["Date","Employee","Status","Sales","Commission %","Daily Pay","Accumulated"]):'<p class="muted">No actual work / attendance records for this month.</p>';
 }
 function renderEmployeeDtr(id){
  const box=$("employeeDtrProfile"); if(!box)return;
@@ -486,18 +545,18 @@ function renderEmployeeDtr(id){
  const totalSales=state.sales.filter(x=>String(x.employeeId)===String(e.id)).reduce((t,x)=>t+Number(x.amount||0),0);
  const completed=rows.filter(a=>a.clockIn&&a.clockOut); const totalMinutes=completed.reduce((t,a)=>t+(dtrMinutes(a)||0),0);
  const todayRecord=rows.find(a=>a.date===today()); const todaySales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===today()).reduce((t,x)=>t+Number(x.amount||0),0);
- const rate=commRate(todayRecord?.status||"awol");
- const commission=todaySales*rate;
+ const rate=isWorkedAttendance(todayRecord)?commRate(todayRecord.status):0;
+ const commission=isWorkedAttendance(todayRecord)?todaySales*rate:0;
  const totalSalary=rows.reduce((t,a)=>t+pay(e,a.date),0);
  const type=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";
  const history=rows.length?rows.map(a=>{
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
    const r=commRate(a.status||"awol");
-   return [dateLabel(a.date),e.start||"—",a.clockIn||"—",a.clockOut||"—",dtrHours(a),money(sales),`${Math.round(r*100)}%`,money(sales*r),statusBadge(a.status||"awol")];
+   return [dateLabel(a.date),e.start||"—",a.clockIn||"—",a.clockOut||"—",dtrHours(a),money(sales),`${Math.round(r*100)}%`,money(isWorkedAttendance(a)?sales*r:0),statusBadge(a.status||"awol")];
  }):[];
  box.className="employee-dtr-profile";
  box.innerHTML=`<div class="dtr-employee-header"><div class="dtr-avatar">${(e.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div class="dtr-employee-main"><span class="section-kicker">EMPLOYEE DTR PROFILE</span><h3>${e.name}</h3><p>${e.id} · ${type} · Schedule ${e.start||"—"}</p></div><button type="button" class="dtr-print" onclick="window.print()">PRINT DTR</button></div>
- <div class="dtr-kpi-grid"><div class="dtr-kpi"><span>TIME IN TODAY</span><b>${todayRecord?.clockIn||"—"}</b><small>${todayRecord?statusBadge(todayRecord.status||"awol"):"No record yet"}</small></div><div class="dtr-kpi"><span>TIME OUT TODAY</span><b>${todayRecord?.clockOut||"—"}</b><small>${todayRecord?.clockOut?dtrHours(todayRecord):"Pending"}</small></div><div class="dtr-kpi"><span>TODAY'S SALES</span><b>${money(todaySales)}</b><small>Commission ${Math.round(rate*100)}%</small></div><div class="dtr-kpi"><span>TOTAL SALES</span><b>${money(totalSales)}</b><small>${rows.length} attendance record${rows.length===1?"":"s"}</small></div><div class="dtr-kpi"><span>TOTAL HOURS</span><b>${(totalMinutes/60).toFixed(2)}</b><small>Completed shifts</small></div><div class="dtr-kpi"><span>TOTAL SALARY</span><b>${money(totalSalary)}</b><small>Basic pay + commission</small></div><div class="dtr-kpi"><span>TODAY COMMISSION</span><b>${money(commission)}</b><small>${Math.round(rate*100)}% of today's sales</small></div></div>
+ <div class="dtr-kpi-grid"><div class="dtr-kpi"><span>TIME IN TODAY</span><b>${todayRecord?.clockIn||"—"}</b><small>${todayRecord?statusBadge(todayRecord.status||"awol"):"No record yet"}</small></div><div class="dtr-kpi"><span>TIME OUT TODAY</span><b>${todayRecord?.clockOut||"—"}</b><small>${todayRecord?.clockOut?dtrHours(todayRecord):"Pending"}</small></div><div class="dtr-kpi"><span>TODAY'S SALES</span><b>${money(todaySales)}</b><small>Commission ${Math.round(rate*100)}%</small></div><div class="dtr-kpi"><span>TOTAL SALES</span><b>${money(totalSales)}</b><small>${rows.length} attendance record${rows.length===1?"":"s"}</small></div><div class="dtr-kpi"><span>TOTAL HOURS</span><b>${(totalMinutes/60).toFixed(2)}</b><small>Completed shifts</small></div><div class="dtr-kpi"><span>TOTAL SALARY</span><b>${money(totalSalary)}</b><small>Higher of minimum pay or commission</small></div><div class="dtr-kpi"><span>TODAY COMMISSION</span><b>${money(commission)}</b><small>${Math.round(rate*100)}% of today's sales</small></div></div>
  <div class="dtr-table-wrap">${history.length?table(history,["DATE","SCHEDULE","TIME IN","TIME OUT","HOURS","SALES","COMMISSION %","COMMISSION","STATUS"]):'<p class="muted dtr-no-records">No DTR history for this employee yet.</p>'}</div>`;
 }
 function refreshDtrSelector(){
@@ -554,8 +613,7 @@ function expenseItemsFor(date){
 }
 function totalExpensesForDate(date){
  const logged=state.sales.filter(s=>s.date===date);
- const direct=logged.reduce((t,x)=>t+Number(x.expense||0),0);
- if(direct>0)return direct;
+ if(logged.length)return logged.reduce((t,x)=>t+Number(x.expense||0),0);
  return Number((state.dailyReports?.[date]||{}).expenses||0);
 }
 function totalRemittanceForDate(date){return state.sales.filter(s=>s.date===date).reduce((t,x)=>t+Number(x.remittance||0),0);}
@@ -577,20 +635,6 @@ async function saveReportRecord(date,patch){
    cacheState();
    return report;
  }catch(err){console.error(err);alert(`Report cloud save failed: ${err?.code||err?.message||err}`);throw err;}
-}
-async function saveDailyReport(){
- const date=$("reportDate")?.value||today();
- const cash=Number($("reportCash")?.value||0);
- const remittedValue=$("reportCashRemitted")?.value;
- const notes=$("reportRemittanceNotes")?.value||"";
- await saveReportRecord(date,{cash,cashRemitted:remittedValue===""?null:Number(remittedValue),remittanceNotes:notes,expenses:totalExpensesForDate(date)});
- renderReports(currentReportView||"daily");
-}
-function loadDailyReportInputs(){
- const date=$("reportDate")?.value||today(),r=state.dailyReports?.[date]||{};
- if($("reportCash"))$("reportCash").value=r.cash??"";
- if($("reportCashRemitted"))$("reportCashRemitted").value=r.cashRemitted??"";
- if($("reportRemittanceNotes"))$("reportRemittanceNotes").value=r.remittanceNotes||"";
 }
 function periodDates(mode,selected){
  const prefix=mode==="yearly"?selected.slice(0,4):selected.slice(0,7);
@@ -620,7 +664,19 @@ function breakdownHTML(items,emptyText="No records yet."){
 }
 function renderReportSummary(f,rows){
  const tx=rows.length, cars=rows.filter(x=>/carwash|wash/i.test(x.note||"")).length;
- const cards=[['Total Sales',money(f.totalSale),'blue'],['Cash Sales',money(f.cash||0),'green'],['Expenses',money(f.expenses),'red'],['Cash Remaining',money(f.totalSale-f.expenses),'gold'],['Transactions',tx,'blue'],['Total Payroll',money(f.payroll||0),'purple'],['Total Commission',money(rows.reduce((t,s)=>{const a=state.attendance.find(x=>x.employeeId===s.employeeId&&x.date===s.date);return t+Number(s.amount||0)*commRate(a?.status||"awol")},0)),'red'],['Cars Washed',cars,'blue']];
+ const commission=rows.reduce((t,s)=>{const e=state.employees.find(x=>String(x.id)===String(s.employeeId));return t+(e?commissionFor(e,s.date):0)},0);
+ const cards=[
+  ['Total Sales',money(f.totalSale),'blue'],
+  ['Cash Sales',money(f.cash||0),'green'],
+  ['Expenses',money(f.expenses),'red'],
+  ['Cash Remaining',money(f.totalSale-f.expenses),'gold'],
+  ['Transactions',tx,'blue'],
+  ['Total Payroll',money(f.payroll||0),'purple'],
+  ['Total Commission',money(commission),'red'],
+  ['Cars Washed',cars,'blue'],
+  ['Short',money(f.short||0),'red'],
+  ['Over',money(f.over||0),'green']
+ ];
  $("reportSummaryCards").innerHTML=cards.map(c=>`<div class="report-summary-card report-${c[2]}"><span>${c[0]}</span><b>${c[1]}</b></div>`).join("");
 }
 function renderReports(mode){
@@ -628,14 +684,27 @@ function renderReports(mode){
  const rows=reportSalesSet(mode,date);let f;if(mode==='daily')f=dailyFinancials(date);else f=periodFinancials(mode,mode==='monthly'?date.slice(0,7):date.slice(0,4));
  renderReportSummary(f,rows);
  const service={};rows.forEach(s=>{const key=/detail/i.test(s.note||'')?'Detailing':/wax/i.test(s.note||'')?'Wax':/interior/i.test(s.note||'')?'Interior':/add/i.test(s.note||'')?'Add-ons':/carwash|wash/i.test(s.note||'')?'Carwash':'Other';service[key]=(service[key]||0)+Number(s.amount||0)});
- const payments={};rows.forEach(s=>{const key='Remitted';payments[key]=(payments[key]||0)+Number(s.remittance||0)});
+ const payments={};rows.forEach(s=>{const key='Cash Remitted';payments[key]=(payments[key]||0)+Number(s.remittance||0)});
  $("reportSalesBreakdown").innerHTML=breakdownHTML(Object.entries(service).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));
- $("reportPaymentBreakdown").innerHTML=breakdownHTML(Object.entries(payments).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value),"No remittance records yet.");
+ $("reportPaymentBreakdown").innerHTML=breakdownHTML(Object.entries(payments).map(([label,value])=>({label,value})),"No remittance records yet.");
  $("reportTableTitle").textContent=mode==='daily'?'Daily Sales Transactions':mode==='monthly'?'Monthly Sales Transactions':'Yearly Sales Transactions';
  $("reportTableSubtitle").textContent=mode==='daily'?`Selected date: ${date}`:mode==='monthly'?`Selected month: ${date.slice(0,7)}`:`Selected year: ${date.slice(0,4)}`;
- let tableRows;if(mode==='daily')tableRows=rows.slice().sort((a,b)=>String(b.time||'').localeCompare(String(a.time||''))).map(s=>[s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,money(s.amount),money(s.expense||0),money(s.remittance||0),s.note||'—']);
- else {const prefix=mode==='monthly'?date.slice(0,7):date.slice(0,4);const periods=new Set(rows.map(s=>String(s.date||'').slice(0,mode==='monthly'?7:4)));tableRows=[...periods].sort().reverse().map(period=>{const rr=rows.filter(s=>String(s.date||'').startsWith(prefix)&&String(s.date||'').slice(0,mode==='monthly'?7:4)===period);return[period,rr.length,money(sumSales(rr)),money(rr.reduce((t,s)=>t+Number(s.expense||0),0)),money(rr.reduce((t,s)=>t+Number(s.remittance||0),0))]});}
- $("reportOutput").innerHTML=table(tableRows,mode==='daily'?["Time","Employee","Sales","Expenses","Remitted","Note"]:[mode==='monthly'?"Month":"Year","Transactions","Total Sales","Expenses","Remitted"]);
+ let tableRows;
+ if(mode==='daily'){
+   tableRows=rows.slice().sort((a,b)=>String(b.time||'').localeCompare(String(a.time||''))).map(s=>{
+     const expected=Number(s.amount||0)-Number(s.expense||0),variance=Number(s.remittance||0)-expected;
+     return[s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,money(s.amount),money(s.expense||0),money(expected),money(s.remittance||0),variance<0?`<span class="cash-short">Short ${money(Math.abs(variance))}</span>`:variance>0?`<span class="cash-over">Over ${money(variance)}</span>`:'—',s.note||'—'];
+   });
+ } else {
+   const prefix=mode==='monthly'?date.slice(0,7):date.slice(0,4);
+   const periods=new Set(rows.map(s=>String(s.date||'').slice(0,mode==='monthly'?7:4)));
+   tableRows=[...periods].sort().reverse().map(period=>{
+     const rr=rows.filter(s=>String(s.date||'').startsWith(prefix)&&String(s.date||'').slice(0,mode==='monthly'?7:4)===period);
+     const gross=sumSales(rr),exp=rr.reduce((t,s)=>t+Number(s.expense||0),0),expected=gross-exp,rem=rr.reduce((t,s)=>t+Number(s.remittance||0),0),variance=rem-expected;
+     return[period,rr.length,money(gross),money(exp),money(expected),money(rem),variance<0?`<span class="cash-short">Short ${money(Math.abs(variance))}</span>`:variance>0?`<span class="cash-over">Over ${money(variance)}</span>`:'—'];
+   });
+ }
+ $("reportOutput").innerHTML=table(tableRows,mode==='daily'?["Time","Employee","Sales","Expenses","Expected Remittance","Remitted","Over / Short","Note"]:[mode==='monthly'?"Month":"Year","Transactions","Total Sales","Expenses","Expected Remittance","Remitted","Over / Short"]);
  renderMonthlyEmployeeSales(date,mode);
 }
 function renderMonthlyEmployeeSales(date,mode){
@@ -644,7 +713,7 @@ function renderMonthlyEmployeeSales(date,mode){
    const empSales=state.sales.filter(s=>String(s.employeeId)===String(e.id)&&String(s.date||'').startsWith(month));
    const sales=empSales.reduce((t,s)=>t+Number(s.amount||0),0),remitted=empSales.reduce((t,s)=>t+Number(s.remittance||0),0),expenses=empSales.reduce((t,s)=>t+Number(s.expense||0),0);
    const dates=[...new Set(state.attendance.filter(a=>String(a.employeeId)===String(e.id)&&String(a.date||'').startsWith(month)).map(a=>a.date))];
-   const commission=dates.reduce((t,d)=>t+state.sales.filter(s=>String(s.employeeId)===String(e.id)&&s.date===d).reduce((z,s)=>{const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===d);return z+Number(s.amount||0)*commRate(a?.status||'awol')},0),0);
+   const commission=dates.reduce((t,d)=>t+state.sales.filter(s=>String(s.employeeId)===String(e.id)&&s.date===d).reduce((z,s)=>{const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===d);return z+(a&&isWorkedAttendance(a)?Number(s.amount||0)*commRate(a.status):0)},0),0);
    const payroll=dates.reduce((t,d)=>t+pay(e,d),0);
    return[e.name,e.type,money(sales),money(expenses),money(remitted),money(commission),money(payroll)]
  }).filter(r=>Number(String(r[2]).replace(/[^0-9.-]/g,''))>0||Number(String(r[4]).replace(/[^0-9.-]/g,''))>0||Number(String(r[6]).replace(/[^0-9.-]/g,''))>0).sort((a,b)=>Number(String(b[2]).replace(/[^0-9.-]/g,''))-Number(String(a[2]).replace(/[^0-9.-]/g,'')));
@@ -654,7 +723,7 @@ function renderExpenseList(date){return;}
 function renderBusinessSummary(){
  const dates=reportDates();const all=state.sales;const expenses=dates.reduce((t,d)=>t+totalExpensesForDate(d),0);const payroll=dates.reduce((t,d)=>t+state.employees.reduce((z,e)=>z+(state.attendance.some(a=>a.date===d&&a.employeeId===e.id)?pay(e,d):0),0),0);const f={totalSale:sumSales(all),cash:dates.reduce((t,d)=>t+Number(state.dailyReports?.[d]?.cash||0),0),expenses,cashRemitted:dates.reduce((t,d)=>t+Number(state.dailyReports?.[d]?.cashRemitted||0),0),payroll};renderReportSummary(f,all);$("reportSalesBreakdown").innerHTML=breakdownHTML(Object.entries(all.reduce((o,s)=>{const k=/detail/i.test(s.note||"")?'Detailing':/wax/i.test(s.note||"")?'Wax':/carwash|wash/i.test(s.note||"")?'Carwash':'Other';o[k]=(o[k]||0)+Number(s.amount||0);return o},{})).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));$("reportPaymentBreakdown").innerHTML=breakdownHTML(Object.entries(all.reduce((o,s)=>{const k=s.paymentMethod||'Cash';o[k]=(o[k]||0)+Number(s.amount||0);return o},{})).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));$("reportTableTitle").textContent='Business Summary';$("reportTableSubtitle").textContent='All available business records';$("reportOutput").innerHTML=table(dates.map(d=>{const x=dailyFinancials(d);return[d,money(x.totalSale),money(x.expenses),money(x.cashRemitted),x.hasRemitted&&x.short?money(x.short):'—',x.hasRemitted&&x.over?money(x.over):'—']}),["Date","Sales","Expenses","Remitted","Short","Over"]);renderExpenseList(date);}
 function renderEmployeeReport(){
- const rows=state.employees.map(e=>{const sales=sumSales(state.sales.filter(s=>String(s.employeeId)===String(e.id)));const days=state.attendance.filter(a=>String(a.employeeId)===String(e.id)).length;const commission=state.sales.filter(s=>String(s.employeeId)===String(e.id)).reduce((t,s)=>{const a=state.attendance.find(x=>x.employeeId===s.employeeId&&x.date===s.date);return t+Number(s.amount||0)*commRate(a?.status||'awol')},0);return[e.id,e.name,money(sales),days,money(commission)]});$("reportSummaryCards").innerHTML=`<div class="report-summary-card report-blue"><span>Total Employees</span><b>${state.employees.length}</b></div><div class="report-summary-card report-green"><span>Employees With Sales</span><b>${new Set(state.sales.map(s=>String(s.employeeId))).size}</b></div><div class="report-summary-card report-purple"><span>Total Sales</span><b>${money(sumSales(state.sales))}</b></div><div class="report-summary-card report-gold"><span>Total Commission</span><b>${money(rows.reduce((t,r)=>t+Number(String(r[4]).replace(/[^0-9.-]/g,'')),0))}</b></div>`;$("reportSalesBreakdown").innerHTML='<p class="muted">Employee performance is calculated from actual sales and attendance.</p>';$("reportPaymentBreakdown").innerHTML='<p class="muted">Select a date/report period for payment breakdown.</p>';$("reportTableTitle").textContent='Employee Performance';$("reportTableSubtitle").textContent='Sales, attendance and commission';$("reportOutput").innerHTML=table(rows,["ID","Employee","Sales","Attendance Days","Commission"]);renderExpenseList($("reportDate")?.value||today());}
+ const rows=state.employees.map(e=>{const sales=sumSales(state.sales.filter(s=>String(s.employeeId)===String(e.id)));const days=state.attendance.filter(a=>String(a.employeeId)===String(e.id)).length;const commission=state.sales.filter(s=>String(s.employeeId)===String(e.id)).reduce((t,s)=>{const a=state.attendance.find(x=>x.employeeId===s.employeeId&&x.date===s.date);return t+(a&&isWorkedAttendance(a)?Number(s.amount||0)*commRate(a.status):0)},0);return[e.id,e.name,money(sales),days,money(commission)]});$("reportSummaryCards").innerHTML=`<div class="report-summary-card report-blue"><span>Total Employees</span><b>${state.employees.length}</b></div><div class="report-summary-card report-green"><span>Employees With Sales</span><b>${new Set(state.sales.map(s=>String(s.employeeId))).size}</b></div><div class="report-summary-card report-purple"><span>Total Sales</span><b>${money(sumSales(state.sales))}</b></div><div class="report-summary-card report-gold"><span>Total Commission</span><b>${money(rows.reduce((t,r)=>t+Number(String(r[4]).replace(/[^0-9.-]/g,'')),0))}</b></div>`;$("reportSalesBreakdown").innerHTML='<p class="muted">Employee performance is calculated from actual sales and attendance.</p>';$("reportPaymentBreakdown").innerHTML='<p class="muted">Select a date/report period for payment breakdown.</p>';$("reportTableTitle").textContent='Employee Performance';$("reportTableSubtitle").textContent='Sales, attendance and commission';$("reportOutput").innerHTML=table(rows,["ID","Employee","Sales","Attendance Days","Commission"]);renderExpenseList($("reportDate")?.value||today());}
 let currentReportView='daily';
 function makeReport(mode){if(mode==='business')renderBusinessSummary();else if(mode==='employee')renderEmployeeReport();else renderReports(mode);}
 
@@ -673,19 +742,22 @@ function renderSalesPage(mode='daily'){
  const date=$("salesViewDate")?.value||today();if($("salesViewDate"))$("salesViewDate").value=date;
  const rows=salesForDate(date),total=sumSales(rows),expenses=totalExpensesForDate(date),remitted=totalRemittanceForDate(date),net=total-expenses;
  if($("salesHistoryLabel"))$("salesHistoryLabel").textContent=`${date} • ${rows.length} transaction${rows.length===1?'':'s'}`;
- if($("salesExpenseSummary"))$("salesExpenseSummary").innerHTML=`<div><span>Total Sales</span><b>${money(total)}</b></div><div><span>Other Expenses</span><b class="expense-value">− ${money(expenses)}</b></div><div><span>Expected Remittance</span><b>${money(net)}</b></div><div><span>Total Remitted</span><b>${money(remitted)}</b></div>`;
- if($("salesTable"))$("salesTable").innerHTML=rows.length?table(rows.slice().reverse().map(s=>[s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,money(s.amount),money(s.expense||0),money(s.remittance||0),s.note||'—']),["Date/Time","Employee","Sales","Expenses","Remitted","Note"]):'<p class="muted">No sales logged for this date.</p>';
-}
-async function addExpense(){
- const date=$("expenseDate").value||today(),item={id:crypto.randomUUID?crypto.randomUUID():`exp_${Date.now()}`,category:$("expenseCategory").value,description:$("expenseDescription").value.trim(),amount:Number($("expenseAmount").value||0),paymentMethod:$("expensePayment").value,notes:$("expenseNotes").value.trim(),createdAtISO:new Date().toISOString()};if(!item.amount||item.amount<0){alert('Please enter a valid expense amount.');return;}const items=[...expenseItemsFor(date),item];await saveReportRecord(date,{expenseItems:items,expenses:items.reduce((t,x)=>t+Number(x.amount||0),0)});$("expenseForm").reset();$("expenseDate").value=date;$("expenseModal").classList.add('hidden');renderReports(currentReportView);
+ const variance=remitted-net;
+ if($("salesExpenseSummary"))$("salesExpenseSummary").innerHTML=`<div><span>Total Sales</span><b>${money(total)}</b></div><div><span>Other Expenses</span><b class="expense-value">− ${money(expenses)}</b></div><div><span>Expected Remittance</span><b>${money(net)}</b></div><div><span>Total Remitted</span><b>${money(remitted)}</b></div><div><span>Over / Short</span><b class="${variance<0?'cash-short':variance>0?'cash-over':''}">${variance<0?'Short ':variance>0?'Over ':''}${money(Math.abs(variance))}</b></div>`;
+ if($("salesTable"))$("salesTable").innerHTML=rows.length?table(rows.slice().reverse().map(s=>{const expected=Number(s.amount||0)-Number(s.expense||0),v=Number(s.remittance||0)-expected;return[s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,money(s.amount),money(s.expense||0),money(expected),money(s.remittance||0),v<0?`<span class="cash-short">Short ${money(Math.abs(v))}</span>`:v>0?`<span class="cash-over">Over ${money(v)}</span>`:'—',s.note||'—'];}),["Date/Time","Employee","Sales","Expenses","Expected","Remitted","Over / Short","Note"]):'<p class="muted">No sales logged for this date.</p>';
 }
 function exportCurrentTable(kind){const source=kind==='sales'?$("salesPeriodTable")||$("salesRecentTransactions"):$("reportOutput");const tableEl=source?.querySelector('table');if(!tableEl){alert('No table data to export.');return;}const csv=[...tableEl.rows].map(r=>[...r.cells].map(c=>'"'+c.textContent.replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`big-guys-${kind}-${today()}.csv`;a.click();URL.revokeObjectURL(url);}
 $("dtrEmployeeSelect")?.addEventListener("change",e=>{selectedDtrEmployeeId=e.target.value||"";renderEmployeeDtr(selectedDtrEmployeeId);});
 $("payrollMonth")?.addEventListener("change",renderPayroll);
 $("salesViewDate")?.addEventListener("change",()=>renderSalesPage("daily"));
+$("attendanceDate")?.addEventListener("change",()=>renderAttendanceAdmin(attendanceDateValue()));
+$("settingsEmployee")?.addEventListener("change",renderSettings);
+$("saveOffDays")?.addEventListener("click",saveEmployeeOffDays);
 
 $("reportDate").value=today();
 $("salesViewDate").value=today();
+if($("attendanceDate"))$("attendanceDate").value=today();
+renderSettings();
 let salesDayKey=today();setInterval(()=>{const d=today();if(d!==salesDayKey){salesDayKey=d;if($("salesViewDate"))$("salesViewDate").value=d;if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');}},1000);
 $("payrollMonth").value=today().slice(0,7);
 
@@ -697,6 +769,8 @@ function activateTab(tab){
  document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));
  const panel=$(tab);if(panel)panel.classList.remove("hidden");
  if(tab!=="sales")document.getElementById("salesSubnav")?.classList.remove("open");
+ if(tab==="attendance")renderAttendanceAdmin(attendanceDateValue());
+ if(tab==="settings")renderSettings();
  document.getElementById("adminSidebar")?.classList.remove("open");
 }
 document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();if(btn.id==="salesNav"){const sub=document.getElementById("salesSubnav");sub?.classList.toggle("open");activateTab("sales");}else activateTab(btn.dataset.tab)}));
@@ -710,7 +784,6 @@ $("salesAddQuick")?.addEventListener('click',()=>document.getElementById('saleAm
 $("salesExportBtn")?.addEventListener('click',()=>exportCurrentTable('sales'));
 $("reportExportBtn")?.addEventListener('click',()=>exportCurrentTable('report'));
 
-$("closeExpenseModal")?.addEventListener('click',()=>$("expenseModal").classList.add('hidden'));$("cancelExpense")?.addEventListener('click',()=>$("expenseModal").classList.add('hidden'));$("expenseForm")?.addEventListener('submit',e=>{e.preventDefault();addExpense();});
 $("reportPrintBtn")?.addEventListener('click',()=>window.print());$("salesPrintBtn")?.addEventListener('click',()=>window.print());
 
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});

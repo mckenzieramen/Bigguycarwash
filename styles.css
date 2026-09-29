@@ -116,3 +116,20 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .payroll-page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:12px}.payroll-page-head h2{margin:2px 0 4px;font-size:25px}.payroll-period{display:flex;flex-direction:column;gap:5px;min-width:170px}.payroll-period label{font-size:10px;color:#91a8bc;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.payroll-period input{width:100%}.payroll-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:9px}.payroll-summary-grid>div{padding:14px;border:1px solid #173149;border-radius:10px;background:linear-gradient(145deg,#071827,#06111c);box-shadow:inset 0 2px 0 #8c5cff,0 12px 28px #0005}.payroll-summary-grid span{display:block;color:#91a8bc;font-size:10px}.payroll-summary-grid b{display:block;font-size:19px;margin-top:6px}.sales-expense-card{margin-top:9px;padding:14px}.sales-expense-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.sales-expense-summary>div{padding:13px;border:1px solid #173149;background:#071827;border-radius:9px}.sales-expense-summary span{display:block;color:#91a8bc;font-size:10px}.sales-expense-summary b{display:block;font-size:18px;margin-top:4px}.sales-expense-summary .expense-value{color:#ff7180}
 @media(max-width:900px){.payroll-summary-grid{grid-template-columns:repeat(2,1fr)}.sales-expense-summary{grid-template-columns:1fr}}
 @media(max-width:700px){.payroll-page-head{align-items:stretch;flex-direction:column}.payroll-period{min-width:0}.payroll-summary-grid{grid-template-columns:1fr 1fr}}
+
+/* V47 attendance/settings polish */
+#attendanceDate,#reportDate,#salesViewDate,#payrollMonth{cursor:pointer;accent-color:#1687ff;color-scheme:dark}
+#attendanceDate{min-width:150px}
+.status-off{background:#26384b;color:#c8d5e0;border:1px solid #3b5268}
+.cash-short{font-weight:800;color:#ff6f7c!important}
+.cash-over{font-weight:800;color:#42d69a!important}
+.settings-form-grid{display:grid;grid-template-columns:1fr 2fr auto;gap:14px;align-items:end;margin-top:14px}
+.off-days-grid{display:flex;gap:7px;flex-wrap:wrap}
+.off-day-option{position:relative;display:inline-flex;align-items:center;cursor:pointer}
+.off-day-option input{position:absolute;opacity:0;pointer-events:none}
+.off-day-option span{display:inline-flex;align-items:center;justify-content:center;min-width:48px;padding:9px 10px;border:1px solid #173149;border-radius:9px;background:#071827;color:#a9bdd0;font-size:11px;font-weight:800}
+.off-day-option input:checked+span{background:linear-gradient(90deg,#0878f5,#045bd6);border-color:#1687ff;color:#fff;box-shadow:0 7px 18px #006cff33}
+.off-days-summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;padding:11px 13px;border:1px solid #173149;border-radius:9px;background:#071827;color:#a9bdd0;font-size:11px}
+.off-days-summary strong{color:#fff}
+@media(max-width:900px){.settings-form-grid{grid-template-columns:1fr}.sales-expense-summary{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.sales-expense-summary{grid-template-columns:1fr}.card-heading:has(#attendanceDate){align-items:flex-start;flex-direction:column}}

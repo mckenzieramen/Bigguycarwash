@@ -122,3 +122,14 @@ V46 — Daily Sales + Read-Only Reports Update
 - Monthly/Yearly reports include accumulated employee sales; monthly employee view also shows expenses, remitted, commission and payroll.
 - Report snapshots are automatically saved after each sales log.
 - Premium logo sizing/shadow treatment refined without changing the logo asset.
+
+V47 — 2026-09-30
+- DTR/Attendance now has a calendar date selector and manual MARK ABSENT action.
+- Added Settings > Employee Days Off using weekday calendar-style controls; OFF days are not treated as work and do not generate pay.
+- Enforced No Work / No Attendance / AWOL / Absent / OFF = ₱0 pay; actual worked days use the higher of minimum pay or commission.
+- Removed misleading DTR "Basic pay + commission" wording; DTR now says actual pay is the higher of minimum pay or commission.
+- Daily Sales Other Expenses field no longer starts with 0; placeholder is simply "Other Expenses".
+- Daily Sales history now shows Expected Remittance and Over/Short per transaction and for the selected day.
+- Automatic daily report snapshots now save sales, expenses, expected remittance, remitted amount, and over/short variance.
+- Reports remain read-only and now show Short and Over metrics and detailed remittance reconciliation.
+- Preserved existing Firebase, face recognition, DTR, payroll, sales, navigation, and branding logic outside the requested changes.

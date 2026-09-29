@@ -101,7 +101,10 @@
     </div>
     <div id="employeeDtrProfile" class="employee-dtr-profile empty-dtr"><div class="dtr-empty-icon">◷</div><h3>Select an employee</h3><p class="muted">The employee's DTR details will appear here.</p></div>
   </div>
-  <div class="card inner" style="margin-top:10px"><div class="card-heading"><h2>Today's Attendance</h2></div><div id="attendanceTable"></div></div>
+  <div class="card inner" style="margin-top:10px">
+  <div class="card-heading"><div><h2>Attendance Log</h2><span class="muted">Select a date from the calendar. You can mark an employee Absent when there is no work record.</span></div><input id="attendanceDate" type="date" aria-label="Attendance date"></div>
+  <div id="attendanceTable"></div>
+</div>
 </section>
         <section id="sales" class="tab-panel hidden">
   <div class="sales-page-head">
@@ -114,7 +117,7 @@
       <select id="saleEmployee" required></select>
       <input id="saleAmount" type="number" min="0" step=".01" placeholder="Sales Amount ₱" required>
       <input id="saleRemittance" type="number" min="0" step=".01" placeholder="Total Remittance ₱" required>
-      <input id="saleExpense" type="number" min="0" step=".01" placeholder="Other Expenses ₱" value="0">
+      <input id="saleExpense" type="number" min="0" step=".01" placeholder="Other Expenses">
       <input id="saleNote" placeholder="Note">
       <button type="submit">ADD SALE</button>
     </form>
@@ -145,7 +148,19 @@
   <div class="dashboard-card report-transactions-card"><div class="card-heading"><div><h2 id="reportTableTitle">Daily Sales Transactions</h2><span id="reportTableSubtitle" class="muted">Selected date</span></div><button type="button" class="small-action" id="reportExportBtn">EXPORT CSV</button></div><div id="reportOutput"></div></div>
   <div class="dashboard-card"><div class="card-heading"><div><h2>Monthly Employee Sales</h2><span class="muted">Accumulated sales by employee for the selected month.</span></div></div><div id="reportMonthlyEmployees"></div></div>
 </section>
-        <section id="settings" class="tab-panel hidden"><div class="card inner"><h2>Settings</h2><p class="muted">Administrator configuration area.</p></div></section>
+        <section id="settings" class="tab-panel hidden">
+  <div class="card inner">
+    <div class="section-kicker">ATTENDANCE SETTINGS</div>
+    <h2>Employee Days Off</h2>
+    <p class="muted">Set the regular days off for each employee. Days marked OFF are not treated as Absence and do not generate pay.</p>
+    <div class="settings-form-grid">
+      <div class="field"><label for="settingsEmployee">Employee</label><select id="settingsEmployee"><option value="">Select Employee</option></select></div>
+      <div class="field"><label>Regular Days Off</label><div id="employeeOffDays" class="off-days-grid"></div></div>
+      <div class="settings-actions"><button type="button" id="saveOffDays" class="small-action">SAVE DAYS OFF</button></div>
+    </div>
+    <div id="offDaysSummary" class="off-days-summary"></div>
+  </div>
+</section>
       </div>
 
       <aside class="dashboard-right">
@@ -160,7 +175,7 @@
   </main>
 </div>
 
-<div id="expenseModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle"><div class="enrollment-modal-backdrop"></div><div class="enrollment-modal-card expense-modal-card"><div class="enrollment-modal-head"><div><span class="section-kicker">BUSINESS EXPENSE</span><h2 id="expenseModalTitle">Add Expense</h2><p class="muted">This expense will be included in the selected report date.</p></div><button type="button" id="closeExpenseModal" class="modal-close" aria-label="Close">×</button></div><form id="expenseForm" class="form-grid expense-form"><div class="field"><label for="expenseCategory">Category</label><select id="expenseCategory"><option>Supplies</option><option>Maintenance</option><option>Utilities</option><option>Payroll Adjustment</option><option>Other</option></select></div><div class="field"><label for="expenseDescription">Description</label><input id="expenseDescription" placeholder="What was purchased or paid?"></div><div class="field"><label for="expenseAmount">Amount</label><input id="expenseAmount" type="number" min="0" step=".01" required placeholder="₱0.00"></div><div class="field"><label for="expensePayment">Payment Method</label><select id="expensePayment"><option>Cash</option><option>GCash</option><option>Maya</option><option>Other</option></select></div><div class="field"><label for="expenseDate">Date</label><input id="expenseDate" type="date" required></div><div class="field"><label for="expenseNotes">Notes</label><input id="expenseNotes" placeholder="Optional notes"></div><div class="expense-form-actions"><button type="button" id="cancelExpense" class="small-action">CANCEL</button><button type="submit">SAVE EXPENSE</button></div></form></div></div><div id="enrollmentModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="enrollmentModalTitle">
+<div id="enrollmentModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="enrollmentModalTitle">
   <div class="enrollment-modal-backdrop"></div>
   <div class="enrollment-modal-card">
     <div class="enrollment-modal-head">
