@@ -53,7 +53,7 @@
     let lastFaceCapture=null;
     // Lightweight latest capture is optional and deliberately kept separate from history.
     try{const latest=await db.doc('bigguys_meta/attendance').get();if(latest.exists)lastFaceCapture=latest.data()?.lastFaceCapture||null;}catch(e){}
-    return clean({employees:employees.map(x=>{const y={...x};delete y.id;return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
+    return clean({employees:employees.map(x=>{const y={...x};if(!y.id)y.id=x.id;return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
   }
   async function migrateLegacyIfNeeded(initial){
     if(!isAdmin())return readCloud();

@@ -431,7 +431,7 @@ function showEmployeeHistory(id){
 async function deleteEmployee(id){
  const employee=state.employees.find(e=>e.id===id);
  if(!employee)return;
- const ok=confirm(`Delete employee ${employee.name} (${employee.id})?\n\nThis will also delete the employee's enrolled face, attendance records, and sales records from this browser.`);
+ const ok=confirm(`Delete employee ${employee.name} (${employee.id})?\n\nThis will also delete the employee's enrolled face, attendance records, and sales records from Firebase.`);
  if(!ok)return;
  try{
    if(window.BigGuysCloud?.deleteEmployee){

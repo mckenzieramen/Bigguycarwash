@@ -10,3 +10,8 @@ V20 — scalable central storage fix
 V23 - Atomic employee ID sequence: central Firestore transaction reserves YYYYMM sequence, preventing duplicate IDs across devices and continuing sequence after deletions.
 
 V24 — DELETE FIX: Employee deletion now removes central employee, face, attendance, and sales records; legacy migration is marked complete so deleted records are not resurrected.
+
+V26 — 2026-09-29
+- FIX ONLY: Restored employee IDs from Firestore document IDs when the employee document has no stored id field. This fixes DELETE/HISTORY/FACE navigation buttons receiving undefined IDs.
+- FIX ONLY: Delete confirmation now explicitly states the records will be deleted from Firebase.
+- Preserved V25 baseline and all existing features.
