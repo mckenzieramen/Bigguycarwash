@@ -21,3 +21,9 @@ V27 — Face enrollment record display fix (2026-09-29)
 - Fixed refresh/local-cache logic from clearing in-memory Firebase face enrollment records.
 - Firebase-saved face enrollment now remains reflected as “Enrolled” after successful enrollment and refresh.
 - No changes to face recognition, employee IDs, navigation, deletion, payroll, sales, or other features.
+
+V28 — Face Enrollment Realtime Race Fix
+- Based exactly on V27.
+- Fixed concurrent Firestore realtime listeners from overwriting a freshly confirmed face enrollment with stale state.
+- After Firebase confirms the 5 face samples, the enrolled samples are immediately retained in the current UI state before refresh.
+- No other feature or data structure changed.

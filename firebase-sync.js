@@ -129,7 +129,22 @@
   async function saveDailyReport(date,report){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');await db.doc(`${C.reports}/${date}`).set({...report,date,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   function startListeners(onRemote){
     const refs=[db.collection(C.employees),db.collection(C.faces),db.collection(C.attendance)];if(isAdmin()){refs.push(db.collection(C.sales),db.collection(C.reports));}
-    const apply=async()=>{try{const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});}catch(e){status({ready:true,status:'error',lastSyncError:e,error:e});}};
+    let remoteTimer=null,remoteRun=0;
+    const apply=()=>{
+      clearTimeout(remoteTimer);
+      remoteTimer=setTimeout(async()=>{
+        const run=++remoteRun;
+        try{
+          const next=await readCloud();
+          // Multiple collection listeners can fire together (for example after a face save).
+          // Coalesce them and only apply the newest read so an older snapshot cannot overwrite
+          // a freshly confirmed face enrollment with stale state.
+          if(run!==remoteRun)return;
+          window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);
+          status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
+        }catch(e){status({ready:true,status:'error',lastSyncError:e,error:e});}
+      },80);
+    };
     refs.forEach(ref=>unsubscribers.push(ref.onSnapshot(apply,e=>status({ready:true,status:'error',lastSyncError:e,error:e}))));
     unsubscribers.push(db.doc('bigguys_meta/attendance').onSnapshot(apply,e=>{}));
   }

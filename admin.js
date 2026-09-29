@@ -348,6 +348,12 @@ async function runAutoEnrollment(){
      for(let attempt=1;attempt<=5&&!confirmed;attempt++){
        try{
          if(window.BigGuysCloud?.saveFaceEnrollment)state=await window.BigGuysCloud.saveFaceEnrollment(id,enrollmentSamples);else await syncAdminNow();
+         // Keep the just-confirmed samples visible locally even if a realtime listener
+         // delivers an older collection snapshot during the same save cycle.
+         state.faces=state.faces&&typeof state.faces==='object'?state.faces:{};
+         state.faces[id]=enrollmentSamples.map(sample=>Array.from(sample));
+         state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==='object'?state.faceUpdatedAt:{};
+         state.faceUpdatedAt[id]=new Date().toISOString();
          cacheState();
          confirmed=Array.isArray(state.faces?.[id])&&state.faces[id].length>=5;
          if(!confirmed)throw new Error('Firebase returned without confirming the enrolled face.');
