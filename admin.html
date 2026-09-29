@@ -50,7 +50,7 @@
       <label>Email</label><input id="adminEmail" type="email" placeholder="Admin email">
       <label>Password</label><input id="adminPassword" type="password" placeholder="Password">
       <button id="loginBtn">LOGIN</button><p id="loginError" class="error"></p>
-      <a class="admin-link" href="./">Employee DTR</a>
+      <div id="cloudStatus" class="muted" style="margin-top:10px">Cloud sync: checking…</div><a class="admin-link" href="./">Employee DTR</a>
     </section>
 
     <section id="dashboard" class="hidden dashboard-layout">
@@ -101,6 +101,11 @@
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-sync.js"></script>
 <script src="admin.js"></script>
 </body>
 </html>

@@ -8,7 +8,7 @@ state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
-const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
+const save=()=>{localStorage.setItem(KEY,JSON.stringify(state)); if(window.BIGGUYS_CLOUD?.ready) window.BIGGUYS_CLOUD.push(state).catch(console.warn);};
 function syncStateFromStorage(){
  try{const raw=JSON.parse(localStorage.getItem(KEY)||"{}");if(!raw||typeof raw!=="object")return;state.employees=Array.isArray(raw.employees)?raw.employees:[];state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];state.sales=Array.isArray(raw.sales)?raw.sales:[];state.faces=raw.faces&&typeof raw.faces==="object"?raw.faces:{};state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{}}catch(e){console.warn("Could not sync dashboard data",e)}
 }
@@ -57,8 +57,8 @@ function refreshDashboardCharts(){
 function refreshRightPanel(){
  const d=today(), records=state.attendance.filter(a=>a.date===d).slice().sort((a,b)=>(b.clockIn||"").localeCompare(a.clockIn||""));
  const captureEl=$("rightFaceCapture"),capturePlaceholder=$("rightFacePlaceholder");
- let captured=null;
- try{captured=JSON.parse(localStorage.getItem("bigguys_last_face_capture")||"null");}catch(e){}
+ let captured=state.lastFaceCapture||null;
+ if(!captured){try{captured=JSON.parse(localStorage.getItem("bigguys_last_face_capture")||"null");}catch(e){}}
  const capturedEmployee=captured?.employeeId?state.employees.find(x=>x.id===captured.employeeId):null;
  if(captured?.dataUrl&&captureEl&&capturedEmployee){captureEl.src=captured.dataUrl;captureEl.classList.remove("hidden");capturePlaceholder?.classList.add("hidden");}else{captureEl?.classList.add("hidden");capturePlaceholder?.classList.remove("hidden");}
  const a=records[0],e=capturedEmployee|| (a?state.employees.find(x=>x.id===a.employeeId):state.employees[0]);
@@ -109,8 +109,25 @@ async function loadModels(){
  $("enrollStatus").textContent="Could not load face models. Check your internet connection and refresh.";
  return false;
 }
-$("loginBtn").onclick=()=>{if($("adminEmail").value.trim()===ADMIN_EMAIL&&$("adminPassword").value===ADMIN_PASSWORD){$("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");refresh();startClock()}else $("loginError").textContent="Invalid admin email or password."};
-$("logoutBtn").onclick=()=>{$("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";document.body.classList.remove("logged-in")};
+$("loginBtn").onclick=async()=>{
+  const email=$("adminEmail").value.trim(),password=$("adminPassword").value;
+  $("loginBtn").disabled=true;$("loginError").textContent="Signing in…";
+  try{
+    if(!window.BigGuysCloud?.configured)throw new Error("Firebase is not configured.");
+    if(email!==ADMIN_EMAIL)throw new Error("This account is not authorized as the Big Guy's administrator.");
+    await BigGuysCloud.adminLogin(email,password);
+    await BigGuysCloud.init(state,remote=>{state=remote;localStorage.setItem(KEY,JSON.stringify(state));refresh()},'admin');
+    $("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");
+    $("loginError").textContent="";refresh();startClock();
+  }catch(err){
+    console.error(err);
+    $("loginError").textContent=err?.message||"Invalid admin email or password.";
+  }finally{$("loginBtn").disabled=false;}
+};
+$("logoutBtn").onclick=async()=>{
+  try{await BigGuysCloud.adminLogout();}catch(e){console.warn(e)}
+  $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";document.body.classList.remove("logged-in");
+};
 $("employeeForm").onsubmit=e=>{e.preventDefault();const id=$("empId").value.trim();if(state.employees.some(x=>x.id===id))return alert("Employee ID already exists.");state.employees.push({id,name:$("empName").value.trim(),type:$("empType").value,start:$("empStart").value});save();e.target.reset();$("empStart").value="08:00";refresh()};
 $("salesForm").onsubmit=e=>{e.preventDefault();state.sales.push({date:today(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value});save();e.target.reset();refresh()};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
@@ -128,19 +145,15 @@ function averageDescriptor(samples){
  return avg;
 }
 function enrollmentFaceIsInsideOval(d){
- const video=$("enrollCamera"),box=d.detection.box;
- const vw=video.videoWidth||720,vh=video.videoHeight||720;
- const rect=video.getBoundingClientRect(),dw=rect.width||video.clientWidth||700,dh=rect.height||video.clientHeight||430;
- const scale=Math.max(dw/vw,dh/vh),rw=vw*scale,rh=vh*scale,ox=(dw-rw)/2,oy=(dh-rh)/2;
- const cx=(box.x+box.width/2)*scale+ox,cy=(box.y+box.height/2)*scale+oy;
- const nx=cx/dw,ny=cy/dh,rx=.285,ry=.455;
- const ellipse=((nx-.5)**2)/(rx**2)+((ny-.50)**2)/(ry**2);
- const faceHeight=(box.height*scale)/dh,faceWidth=(box.width*scale)/dw;
- // The oval is the guide. Allow smaller faces so mobile enrollment works from farther away.
- return ellipse<=1&&faceHeight>=.075&&faceHeight<=.90&&faceWidth>=.045&&faceWidth<=.82;
+ const video=$("enrollCamera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
+ const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
+ const rx=.23,ry=.40;
+ const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
+ const faceHeight=box.height/h,faceWidth=box.width/w;
+ return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
 }
 async function captureEnrollmentSample(id){
- const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)?320:416,scoreThreshold:/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)?.25:.40})).withFaceLandmarks(true).withFaceDescriptor();
+ const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
  if(!d)return false;
  const good=enrollmentFaceIsInsideOval(d);
  const frame=$("enrollOvalFrame");
@@ -175,26 +188,7 @@ async function runAutoEnrollment(){
  }
  enrollmentRunning=false;$("enrollFace").disabled=false;
 }
-$("startEnrollCamera").onclick=async()=>{
- if(!await loadModels())return;
- try{
-  if(!navigator.mediaDevices?.getUserMedia)throw new Error("getUserMedia unavailable");
-  const mobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  const attempts=[
-   {facingMode:{ideal:"user"},width:{ideal:mobile?480:720},height:{ideal:mobile?640:720}},
-   {facingMode:"user",width:{ideal:480},height:{ideal:640}},
-   {facingMode:"user"}
-  ];
-  let lastErr;
-  for(const constraints of attempts){try{enrollStream=await navigator.mediaDevices.getUserMedia({video:constraints,audio:false});break}catch(err){lastErr=err;enrollStream=null;}}
-  if(!enrollStream)throw lastErr||new Error("Camera unavailable");
-  const videoEl=$("enrollCamera");videoEl.srcObject=enrollStream;videoEl.muted=true;videoEl.setAttribute("playsinline","");
-  await new Promise(resolve=>{if(videoEl.readyState>=2)return resolve();videoEl.onloadedmetadata=()=>resolve();setTimeout(resolve,1500)});
-  await videoEl.play().catch(()=>{});
-  $("enrollFace").disabled=false;
-  $("enrollStatus").textContent="Camera ready — press ENROLL FACE to begin automatic multi-sample capture.";
- }catch(e){console.error(e);$("enrollStatus").textContent="Camera permission denied or unavailable. Allow camera access and try again."}
-};
+$("startEnrollCamera").onclick=async()=>{if(!await loadModels())return;try{enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});$("enrollCamera").srcObject=enrollStream;$('enrollFace').disabled=false;$('enrollStatus').textContent="Camera ready — press ENROLL FACE to begin automatic multi-sample capture."}catch(e){$('enrollStatus').textContent="Camera permission denied or unavailable."}};
 $("enrollFace").onclick=runAutoEnrollment;
 
 function showEmployeeHistory(id){
@@ -308,6 +302,9 @@ document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListen
 document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
 document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
-setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000);
+async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
+setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));
+
+setInterval(()=>{const el=$("cloudStatus");if(!el)return;const c=window.BIGGUYS_CLOUD||{};if(c.ready&&c.lastSyncError)el.textContent="Cloud sync: ERROR — "+(c.lastSyncError.message||"write/read failed");else if(c.ready)el.textContent="Cloud sync: CONNECTED to Firebase";else if(c.status==="error")el.textContent="Cloud sync: ERROR — "+(c.error?.message||c.lastSyncError?.message||"Firebase connection failed");else if(c.status==="authenticated")el.textContent="Cloud sync: authenticated — starting Firestore…";else el.textContent=window.BigGuysCloud?.configured?"Cloud sync: waiting for Admin login":"Cloud sync: local mode";},1000);
