@@ -50,21 +50,16 @@
     const [ps,as,bs]=await Promise.all([
       publicRef.get(),attendanceRef.get(),isAdmin()?businessRef.get():Promise.resolve(null)
     ]);
-    const remote={
-      employees:ps.exists&&Array.isArray(ps.data().employees)?ps.data().employees:[],
-      faces:ps.exists&&ps.data().faces&&typeof ps.data().faces==='object'?ps.data().faces:{},
-      attendance:as.exists&&Array.isArray(as.data().attendance)?as.data().attendance:[],
-      lastFaceCapture:as.exists?as.data().lastFaceCapture||null:null,
-      sales:bs?.exists&&Array.isArray(bs.data().sales)?bs.data().sales:[],
-      dailyReports:bs?.exists&&bs.data().dailyReports&&typeof bs.data().dailyReports==='object'?bs.data().dailyReports:{}
-    };
+    const pd=ps.exists?(ps.data()||{}):{};
+    const ad=as.exists?(as.data()||{}):{};
+    const bd=bs?.exists?(bs.data()||{}):{};
     return {
-      employees:remote.employees.length?remote.employees:s.employees,
-      faces:Object.keys(remote.faces).length?remote.faces:s.faces,
-      attendance:remote.attendance.length?remote.attendance:s.attendance,
-      lastFaceCapture:remote.lastFaceCapture||s.lastFaceCapture||null,
-      sales:remote.sales.length?remote.sales:s.sales,
-      dailyReports:Object.keys(remote.dailyReports).length?remote.dailyReports:s.dailyReports
+      employees:Array.isArray(pd.employees)?pd.employees:s.employees,
+      faces:pd.faces&&typeof pd.faces==='object'?pd.faces:s.faces,
+      attendance:Array.isArray(ad.attendance)?ad.attendance:s.attendance,
+      lastFaceCapture:Object.prototype.hasOwnProperty.call(ad,'lastFaceCapture')?ad.lastFaceCapture:(s.lastFaceCapture||null),
+      sales:Array.isArray(bd.sales)?bd.sales:s.sales,
+      dailyReports:bd.dailyReports&&typeof bd.dailyReports==='object'?bd.dailyReports:s.dailyReports
     };
   }
   function startListeners(onRemote){

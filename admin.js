@@ -145,9 +145,18 @@ $("loginBtn").onclick=async()=>{
     if(!window.BigGuysCloud?.configured)throw new Error("Firebase is not configured.");
     if(email!==ADMIN_EMAIL)throw new Error("This account is not authorized as the Big Guy's administrator.");
     await BigGuysCloud.adminLogin(email,password);
-    await BigGuysCloud.init(state,remote=>{state=remote;localStorage.setItem(KEY,JSON.stringify(state));refresh()},'admin');
+    // Show the dashboard immediately after Firebase Authentication succeeds.
+    // Firestore sync continues in the background so login is not blocked by
+    // network reads/writes.
     $("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");
     $("loginError").textContent="";refresh();startClock();
+    BigGuysCloud.init(state,remote=>{
+      state=remote;
+      localStorage.setItem(KEY,JSON.stringify(state));
+      refresh();
+    },'admin').catch(err=>{
+      console.error('Background Firestore sync failed:',err);
+    });
   }catch(err){
     console.error(err);
     $("loginError").textContent=err?.message||"Invalid admin email or password.";
