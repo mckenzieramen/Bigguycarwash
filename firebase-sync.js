@@ -42,25 +42,40 @@
     status({configured:true,ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
     return true;
   }
+  const hasData=s=>!!(s&&(s.employees?.length||s.attendance?.length||s.sales?.length||Object.keys(s.faces||{}).length||Object.keys(s.dailyReports||{}).length||s.lastFaceCapture));
+  const uniqBy=(arr,keyFn)=>{const m=new Map();(Array.isArray(arr)?arr:[]).forEach(x=>m.set(keyFn(x),x));return [...m.values()];};
+  function mergeStates(local,cloud){
+    const l=clean(local), c=clean(cloud);
+    return {
+      employees:uniqBy([...c.employees,...l.employees],x=>String(x?.id||JSON.stringify(x))),
+      faces:Object.assign({},l.faces,c.faces),
+      attendance:uniqBy([...c.attendance,...l.attendance],x=>String(x?.employeeId||'')+'|'+String(x?.date||'')+'|'+String(x?.type||'')+'|'+String(x?.timestamp||x?.time||'')),
+      sales:uniqBy([...c.sales,...l.sales],x=>String(x?.id||'')+'|'+String(x?.employeeId||'')+'|'+String(x?.date||'')+'|'+String(x?.amount||'')+'|'+String(x?.note||'')),
+      dailyReports:Object.assign({},l.dailyReports,c.dailyReports),
+      lastFaceCapture:c.lastFaceCapture||l.lastFaceCapture||null
+    };
+  }
   async function readState(local,mode){
     const s=clean(local);
     const publicRef=db.doc('bigguys/public');
     const attendanceRef=db.doc('bigguys/attendance');
     const businessRef=db.doc('bigguys/business');
-    const [ps,as,bs]=await Promise.all([
-      publicRef.get(),attendanceRef.get(),isAdmin()?businessRef.get():Promise.resolve(null)
-    ]);
+    const [ps,as,bs]=await Promise.all([publicRef.get(),attendanceRef.get(),isAdmin()?businessRef.get():Promise.resolve(null)]);
     const pd=ps.exists?(ps.data()||{}):{};
     const ad=as.exists?(as.data()||{}):{};
     const bd=bs?.exists?(bs.data()||{}):{};
-    return {
-      employees:Array.isArray(pd.employees)?pd.employees:s.employees,
-      faces:pd.faces&&typeof pd.faces==='object'?pd.faces:s.faces,
-      attendance:Array.isArray(ad.attendance)?ad.attendance:s.attendance,
-      lastFaceCapture:Object.prototype.hasOwnProperty.call(ad,'lastFaceCapture')?ad.lastFaceCapture:(s.lastFaceCapture||null),
-      sales:Array.isArray(bd.sales)?bd.sales:s.sales,
-      dailyReports:bd.dailyReports&&typeof bd.dailyReports==='object'?bd.dailyReports:s.dailyReports
+    const cloud={
+      employees:Array.isArray(pd.employees)?pd.employees:[],
+      faces:pd.faces&&typeof pd.faces==='object'?pd.faces:{},
+      attendance:Array.isArray(ad.attendance)?ad.attendance:[],
+      lastFaceCapture:Object.prototype.hasOwnProperty.call(ad,'lastFaceCapture')?ad.lastFaceCapture:null,
+      sales:Array.isArray(bd.sales)?bd.sales:[],
+      dailyReports:bd.dailyReports&&typeof bd.dailyReports==='object'?bd.dailyReports:{}
     };
+    // Cloud is authoritative when populated, but any local records that are not
+    // already in the cloud are merged so an existing computer can migrate its
+    // data instead of being silently cleared.
+    return (ps.exists||as.exists||bs?.exists) ? mergeStates(s,cloud) : s;
   }
   function startListeners(onRemote){
     const publicRef=db.doc('bigguys/public');

@@ -24,3 +24,9 @@ V8 — Automatic Face Save + Mobile Enrollment Oval
 - Expanded face-inside-oval detection tolerance for easier mobile positioning.
 - Enlarged the enrollment oval on desktop and mobile for better face fit.
 - Preserved all existing employee/DTR/sales/payroll functionality.
+
+V9 — Central data synchronization fix
+- Admin page no longer initializes Firebase anonymously before admin login.
+- Cloud/local records are merged instead of allowing an empty device cache to overwrite cloud data.
+- Existing computer data can be migrated into the central Firestore documents when those documents are empty.
+- Employee, face, attendance, sales, and report data are preserved across devices.
