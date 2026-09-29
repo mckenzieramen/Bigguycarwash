@@ -191,16 +191,31 @@ function renderSettings(){
  if(state.employees.some(e=>String(e.id)===String(current)))select.value=current;
  const e=state.employees.find(x=>String(x.id)===String(select.value));
  const wrap=$("employeeOffDays"); if(!wrap)return;
- wrap.innerHTML=WEEKDAYS.map(day=>`<label class="off-day-option"><input type="checkbox" value="${day}" ${employeeOffDays(e).includes(day)?"checked":""}><span>${day.slice(0,3)}</span></label>`).join("");
- $("offDaysSummary").innerHTML=e?`<strong>${e.name}</strong><span>${employeeOffDays(e).length?employeeOffDays(e).join(" • "):"No regular days off set."}</span>`:"Select an employee to configure days off.";
+ const selected=new Set(employeeOffDays(e));
+ wrap.innerHTML=WEEKDAYS.map(day=>`<label class="off-day-option ${selected.has(day)?"selected":""}"><input type="checkbox" value="${day}" ${selected.has(day)?"checked":""}><span>${day}</span></label>`).join("");
+ wrap.querySelectorAll('input[type="checkbox"]').forEach(input=>input.addEventListener("change",()=>input.closest(".off-day-option")?.classList.toggle("selected",input.checked)));
+ $("offDaysSummary").innerHTML=e?`<strong>${e.name}</strong><span>${selected.size?Array.from(selected).join(" • "):"No regular days off selected."}</span>`:"Select an employee to configure days off.";
 }
 async function saveEmployeeOffDays(){
- const id=$("settingsEmployee")?.value; const e=state.employees.find(x=>String(x.id)===String(id));
- if(!e){alert("Select an employee first.");return;}
- const offDays=[...document.querySelectorAll("#employeeOffDays input:checked")].map(x=>x.value);
- e.offDays=offDays;
- try{if(window.BigGuysCloud?.saveEmployee)state=await window.BigGuysCloud.saveEmployee(e);else state=await save();cacheState();renderSettings();renderAttendanceAdmin(attendanceDateValue());renderPayroll();}
- catch(err){console.error("Days off save failed",err);alert(`Unable to save days off: ${err?.code||err?.message||err}`);}
+ const id=$("settingsEmployee")?.value;
+ const current=state.employees.find(x=>String(x.id)===String(id));
+ if(!current){alert("Select an employee first.");return;}
+ const offDays=[...document.querySelectorAll('#employeeOffDays input[type="checkbox"]:checked')].map(x=>x.value);
+ const employee={...current,offDays:[...new Set(offDays)]};
+ try{
+   let next;
+   if(window.BigGuysCloud?.saveEmployee) next=await window.BigGuysCloud.saveEmployee(employee);
+   else next=await save();
+   if(next&&Array.isArray(next.employees)) state=next; else { const local=state.employees.find(x=>String(x.id)===String(id)); if(local)local.offDays=employee.offDays; }
+   cacheState();
+   renderSettings();
+   renderAttendanceAdmin(attendanceDateValue());
+   renderPayroll();
+   alert(employee.offDays.length?`Days off saved: ${employee.offDays.join(", ")}`:"Days off cleared. No regular days off are set.");
+ }catch(err){
+   console.error("Days off save failed",err);
+   alert(`Unable to save days off: ${err?.code||err?.message||err}`);
+ }
 }
 function refresh(){
  syncStateFromStorage();

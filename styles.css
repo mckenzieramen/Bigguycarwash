@@ -125,10 +125,10 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .cash-over{font-weight:800;color:#42d69a!important}
 .settings-form-grid{display:grid;grid-template-columns:1fr 2fr auto;gap:14px;align-items:end;margin-top:14px}
 .off-days-grid{display:flex;gap:7px;flex-wrap:wrap}
-.off-day-option{position:relative;display:inline-flex;align-items:center;cursor:pointer}
-.off-day-option input{position:absolute;opacity:0;pointer-events:none}
+.off-day-option{position:relative;display:inline-flex;align-items:center;cursor:pointer;user-select:none}
+.off-day-option input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:auto}
 .off-day-option span{display:inline-flex;align-items:center;justify-content:center;min-width:48px;padding:9px 10px;border:1px solid #173149;border-radius:9px;background:#071827;color:#a9bdd0;font-size:11px;font-weight:800}
-.off-day-option input:checked+span{background:linear-gradient(90deg,#0878f5,#045bd6);border-color:#1687ff;color:#fff;box-shadow:0 7px 18px #006cff33}
+.off-day-option.selected span,.off-day-option input:checked+span{background:linear-gradient(90deg,#0878f5,#045bd6);border-color:#1687ff;color:#fff;box-shadow:0 7px 18px #006cff33}
 .off-days-summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;padding:11px 13px;border:1px solid #173149;border-radius:9px;background:#071827;color:#a9bdd0;font-size:11px}
 .off-days-summary strong{color:#fff}
 @media(max-width:900px){.settings-form-grid{grid-template-columns:1fr}.sales-expense-summary{grid-template-columns:repeat(2,1fr)}}
