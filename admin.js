@@ -8,6 +8,8 @@ state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
 state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?state.faceUpdatedAt:{};
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
+let attendanceCaptureDisplayedKey=null;
+let attendanceCaptureHideTimer=null;
 const $=id=>document.getElementById(id);
 const save=async()=>{
  localStorage.setItem(KEY,JSON.stringify(state));
@@ -105,7 +107,25 @@ function refreshRightPanel(){
  let captured=state.lastFaceCapture||null;
  if(!captured){try{captured=JSON.parse(localStorage.getItem("bigguys_last_face_capture")||"null");}catch(e){}}
  const capturedEmployee=captured?.employeeId?state.employees.find(x=>x.id===captured.employeeId):null;
- if(captured?.dataUrl&&captureEl&&capturedEmployee){captureEl.src=captured.dataUrl;captureEl.classList.remove("hidden");capturePlaceholder?.classList.add("hidden");setTimeout(()=>{captureEl?.classList.add("hidden");capturePlaceholder?.classList.remove("hidden");},1000);}else{captureEl?.classList.add("hidden");capturePlaceholder?.classList.remove("hidden");}
+ const captureKey=captured?.capturedAt||((captured?.employeeId||"")+"|"+(captured?.dataUrl||""));
+ const consumedKey=localStorage.getItem("bigguys_consumed_attendance_capture")||"";
+ const shouldShowCapture=!!(captured?.dataUrl&&captureEl&&capturedEmployee&&captureKey&&captureKey!==consumedKey);
+ if(shouldShowCapture){
+   attendanceCaptureDisplayedKey=captureKey;
+   localStorage.setItem("bigguys_consumed_attendance_capture",captureKey);
+   if(attendanceCaptureHideTimer)clearTimeout(attendanceCaptureHideTimer);
+   captureEl.src=captured.dataUrl;
+   captureEl.classList.remove("hidden");
+   capturePlaceholder?.classList.add("hidden");
+   attendanceCaptureHideTimer=setTimeout(()=>{
+     captureEl?.classList.add("hidden");
+     capturePlaceholder?.classList.remove("hidden");
+     attendanceCaptureHideTimer=null;
+   },1000);
+ }else{
+   captureEl?.classList.add("hidden");
+   capturePlaceholder?.classList.remove("hidden");
+ }
  const a=records[0],e=capturedEmployee|| (a?state.employees.find(x=>x.id===a.employeeId):state.employees[0]);
  const title=$("rightStatusTitle"),text=$("rightStatusText"),notice=$("rightNoticeTitle"),noticeText=$("rightNoticeText");
  if(e){const attendance=a&&a.employeeId===e.id?a:state.attendance.find(x=>x.employeeId===e.id&&x.date===d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}

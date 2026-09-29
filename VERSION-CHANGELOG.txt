@@ -1,4 +1,3 @@
-Big Guy's Carwash — V17
-Face enrollment Firestore nested-array fix.
-
-Root cause fixed: Firestore rejects arrays nested directly inside arrays. Face descriptor samples are now stored as maps with a `values` array, while the app converts them back to numeric descriptor arrays for face recognition. Existing features and Firebase configuration are preserved.
+Big Guy's Carwash V19
+Change: Attendance Record display now appears once for exactly 1 second per new capture, then stays hidden even when dashboard realtime refreshes. Attendance data itself is preserved.
+Baseline: V17 locked; V19 contains only the requested attendance-display behavior.
