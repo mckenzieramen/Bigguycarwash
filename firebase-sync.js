@@ -35,7 +35,15 @@
     if(!auth)auth=firebase.auth();
     if(auth.currentUser)return auth.currentUser;
     if(mode==='admin')throw new Error('Admin authentication required. Please log in first.');
-    return (await auth.signInAnonymously()).user;
+    try{
+      const result=await auth.signInAnonymously();
+      if(!result?.user)throw new Error('anonymous-auth-failed: Firebase did not return an anonymous user.');
+      return result.user;
+    }catch(err){
+      const code=err?.code||'unknown';
+      const msg=err?.message||String(err);
+      throw new Error(`DTR Firebase authentication failed (${code}). ${msg}`);
+    }
   }
   async function getAll(col){const snap=await db.collection(col).get();return snap.docs.map(d=>({id:d.id,...(d.data()||{})}));}
   async function getDocSafe(path){const s=await db.doc(path).get();return s.exists?(s.data()||{}):{};}

@@ -173,7 +173,10 @@ $("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");asyn
  if(!window.BigGuysCloud)return false;
  const ok=await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); });
  if(!ok){
-   $("cameraStatus").textContent="Firebase face records could not be loaded. Check your connection and try again.";
+   const cloudErr=window.BIGGUYS_CLOUD?.lastSyncError;
+   const code=cloudErr?.code||cloudErr?.message||"unknown Firebase error";
+   console.error("DTR Firebase initialization failed:",cloudErr);
+   $("cameraStatus").textContent=`Firebase could not load enrolled faces: ${code}`;
    setOval("bad");
    return false;
  }
@@ -184,7 +187,7 @@ $("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");asyn
    if(window.BigGuysCloud.refresh){ state=await window.BigGuysCloud.refresh(); cacheState(); }
  }catch(err){
    console.error("Fresh face-record sync failed:",err);
-   $("cameraStatus").textContent="Could not load enrolled face records from Firebase.";
+   $("cameraStatus").textContent=`Firebase face records could not be loaded: ${err?.code||err?.message||err}`;
    setOval("bad");
    return false;
  }
