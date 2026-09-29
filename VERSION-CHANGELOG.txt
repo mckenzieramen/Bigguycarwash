@@ -79,5 +79,13 @@ V39 - 2026-09-29
 - After a successful punch, the recognition is cleared and the scanner can accept the next employee.
 - Existing once-only Time In/Time Out and voice confirmation behavior preserved.
 
-V42 RESTORE NOTE
-Restored exactly to the V40 project baseline after the V41 Sales redesign was rejected. No Sales redesign changes are retained.
+V43 — Sales Overview + Connected Business Reports (2026-09-30)
+- Preserved V40 Big Guy's Carwash branding, sidebar, dashboard layout, DTR/face scan, attendance, payroll, Firebase sync and existing data logic.
+- Redesigned only the Sales and Reports content areas to match the approved reference concept more closely.
+- Sales now has Overview / Daily Sales / Monthly Sales / Yearly Sales views inside the Sales module instead of redirecting to Reports.
+- Added live sales KPIs, 7-day trend, service breakdown, top employees, recent transactions, payment method capture, and CSV export.
+- Reports now includes Daily / Monthly / Yearly / Business Summary / Employee Performance views.
+- Added connected sales, expense, payroll, commission, attendance, cash reconciliation, short/over and remittance summaries.
+- Added custom Add Expense modal with category, description, amount, payment method, date and notes; expense items are stored in the existing daily report Firebase document structure.
+- Preserved backward compatibility with existing numeric daily expense records.
+- Added print actions while preserving existing branding.

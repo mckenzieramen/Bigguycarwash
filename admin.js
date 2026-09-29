@@ -166,7 +166,7 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  $("topSalesToday").innerHTML=table(top.slice(0,6).map((x,i)=>[i+1,x.name,money(x.sales)]),["#","Employee","Sales"]);
  const types={full:"Full Time",semi:"Semi Full Time",part:"Part Time"}; const counts={};state.employees.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);$("employeeTypeSummary").innerHTML=table(Object.keys(counts).map(k=>[types[k]||k,counts[k]]),["Type","Count"]);
  $("recentSales").innerHTML=table(state.sales.slice().reverse().slice(0,6).map(s=>[new Date((s.date||d)+"T"+(s.time||"12:00") ).toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"}),s.note||"Carwash",money(s.amount)]),["Time","Service","Amount"]);
- refreshDashboardCharts();refreshRightPanel();
+ refreshDashboardCharts();refreshRightPanel();if(!$('sales').classList.contains('hidden'))renderSalesPage(document.querySelector('[data-sales-view].active')?.dataset.salesView||'overview');if(!$('reports').classList.contains('hidden'))makeReport(currentReportView);
 }
 async function loadModels(){
  if(modelsReady)return true;
@@ -259,7 +259,7 @@ $("employeeForm").onsubmit=async e=>{
    if(btn){btn.disabled=false;btn.textContent='ADD EMPLOYEE & ENROLL FACE';}
  }
 };
-$("salesForm").onsubmit=async e=>{e.preventDefault();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value};state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}cacheState();e.target.reset();refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
+$("salesForm").onsubmit=async e=>{e.preventDefault();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value,paymentMethod:$("salePayment")?.value||"Cash"};state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}cacheState();e.target.reset();refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 let enrollmentRunning=false,enrollmentSamples=[];
 const ENROLL_STEPS=[
@@ -509,78 +509,144 @@ async function deleteEmployee(id){
  }
 }
 
+function expenseItemsFor(date){
+ const r=state.dailyReports?.[date]||{};
+ return Array.isArray(r.expenseItems)?r.expenseItems:[];
+}
+function totalExpensesForDate(date){
+ const items=expenseItemsFor(date);
+ if(items.length)return items.reduce((t,x)=>t+Number(x.amount||0),0);
+ return Number((state.dailyReports?.[date]||{}).expenses||0);
+}
 function reportDates(){
  const dates=new Set();
  state.sales.forEach(s=>{if(s.date)dates.add(s.date)});
- Object.keys(state.dailyReports).forEach(d=>dates.add(d));
+ Object.keys(state.dailyReports||{}).forEach(d=>dates.add(d));
  return [...dates].sort().reverse();
 }
+function salesForDate(date){return state.sales.filter(x=>x.date===date)}
 function dailyFinancials(date){
- const totalSale=state.sales.filter(x=>x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);
- const r=state.dailyReports[date]||{};
- const cash=Number(r.cash||0),expenses=Number(r.expenses||0),cashRemitted=Number(r.cashRemitted||0);
+ const totalSale=salesForDate(date).reduce((t,x)=>t+Number(x.amount||0),0);
+ const r=state.dailyReports?.[date]||{};
+ const cash=Number(r.cash||0),expenses=totalExpensesForDate(date),cashRemitted=Number(r.cashRemitted||0);
  const hasRemitted=r.cashRemitted!==undefined&&r.cashRemitted!==null&&r.cashRemitted!=="";
- const expected=totalSale-cash-expenses;
+ const expected=totalSale-expenses;
  const difference=hasRemitted?cashRemitted-expected:0;
  return {totalSale,cash,expenses,cashRemitted,expected,difference,short:difference<0?Math.abs(difference):0,over:difference>0?difference:0,hasRemitted};
 }
-async function saveDailyReport(){
- const date=$("reportDate").value||today();
- const cash=Number($("reportCash").value||0),expenses=Number($("reportExpenses").value||0);
- const remittedValue=$("reportCashRemitted").value;
- const report={cash,expenses,cashRemitted:remittedValue===""?null:Number(remittedValue)};
- state.dailyReports[date]=report;
+async function saveReportRecord(date,patch){
+ const current=state.dailyReports?.[date]||{};
+ const report={...current,...patch,date};
  try{
-   if(window.BigGuysCloud?.saveDailyReport){ state=await window.BigGuysCloud.saveDailyReport(date,report); }
-   else { state=await save(); }
+   if(window.BigGuysCloud?.saveDailyReport) state=await window.BigGuysCloud.saveDailyReport(date,report); else {state.dailyReports[date]=report;state=await save();}
    cacheState();
-   makeReport("daily");
- }catch(err){ console.error(err); alert(`Daily report cloud save failed: ${err?.code||err?.message||err}`); }
+   return report;
+ }catch(err){console.error(err);alert(`Report cloud save failed: ${err?.code||err?.message||err}`);throw err;}
+}
+async function saveDailyReport(){
+ const date=$("reportDate")?.value||today();
+ const cash=Number($("reportCash")?.value||0);
+ const remittedValue=$("reportCashRemitted")?.value;
+ const notes=$("reportRemittanceNotes")?.value||"";
+ await saveReportRecord(date,{cash,cashRemitted:remittedValue===""?null:Number(remittedValue),remittanceNotes:notes,expenses:totalExpensesForDate(date)});
+ renderReports(currentReportView||"daily");
 }
 function loadDailyReportInputs(){
- const date=$("reportDate").value||today(),r=state.dailyReports[date]||{};
- $("reportCash").value=r.cash??"";
- $("reportExpenses").value=r.expenses??"";
- $("reportCashRemitted").value=r.cashRemitted??"";
+ const date=$("reportDate")?.value||today(),r=state.dailyReports?.[date]||{};
+ if($("reportCash"))$("reportCash").value=r.cash??"";
+ if($("reportCashRemitted"))$("reportCashRemitted").value=r.cashRemitted??"";
+ if($("reportRemittanceNotes"))$("reportRemittanceNotes").value=r.remittanceNotes||"";
 }
-function periodRows(mode,selected){
+function periodDates(mode,selected){
  const prefix=mode==="yearly"?selected.slice(0,4):selected.slice(0,7);
- const periods=new Set();
- reportDates().forEach(date=>{if(date.startsWith(prefix))periods.add(mode==="yearly"?date.slice(0,4):date.slice(0,7))});
- return [...periods].sort().reverse();
+ return reportDates().filter(date=>date.startsWith(prefix));
 }
 function periodFinancials(mode,period){
  const dates=reportDates().filter(date=>mode==="yearly"?date.startsWith(period):date.startsWith(period));
  let totalSale=0,cash=0,expenses=0,cashRemitted=0,short=0,over=0,payroll=0,remittedCount=0;
  dates.forEach(date=>{
-   const f=dailyFinancials(date); totalSale+=f.totalSale; cash+=f.cash; expenses+=f.expenses;
+   const f=dailyFinancials(date);totalSale+=f.totalSale;cash+=f.cash;expenses+=f.expenses;
    if(f.hasRemitted){cashRemitted+=f.cashRemitted;remittedCount++;short+=f.short;over+=f.over;}
-   const attendanceDates=state.attendance.filter(a=>a.date===date);
-   state.employees.forEach(e=>{if(attendanceDates.some(a=>a.employeeId===e.id))payroll+=pay(e,date)});
+   state.employees.forEach(e=>{if(state.attendance.some(a=>a.date===date&&a.employeeId===e.id))payroll+=pay(e,date)});
  });
  return {totalSale,cash,expenses,cashRemitted,short,over,payroll,remittedCount,net:totalSale-expenses-payroll};
 }
-function makeReport(mode){
- const d=$("reportDate").value||today();
- $("reportDate").value=d;
- if(mode==="daily"){
-   loadDailyReportInputs();
-   const dates=reportDates();
-   const rows=dates.map(date=>{const f=dailyFinancials(date);return [date,money(f.totalSale),money(f.cash),money(f.expenses),f.hasRemitted?money(f.cashRemitted):"—",f.hasRemitted&&f.short?money(f.short):"—",f.hasRemitted&&f.over?money(f.over):"—"]});
-   $("reportOutput").innerHTML=`<div class="report-box"><h3>DAILY SALES REPORT</h3><p class="muted">Daily reconciliation based on the format provided: Total Sale, Cash, Expenses, Cash Remitted, Short, and Over.</p>${table(rows,["DATE","TOTAL SALE","CASH","EXPENSES","CASH REMITTED","SHORT","OVER"])}</div>`;
-   return;
- }
- const prefix=mode==="yearly"?d.slice(0,4):d.slice(0,7);
- const periods=periodRows(mode,d);
- const rows=periods.map(period=>{const f=periodFinancials(mode,period);return [period,money(f.totalSale),money(f.cash),money(f.expenses),f.remittedCount?money(f.cashRemitted):"—",f.remittedCount&&f.short?money(f.short):"—",f.remittedCount&&f.over?money(f.over):"—",money(f.payroll),money(f.net)]});
- const empty=!rows.length?'<p class="muted">No sales or reconciliation records for the selected period.</p>':table(rows,[mode==="monthly"?"MONTH":"YEAR","TOTAL SALES","CASH","EXPENSES","CASH REMITTED","SHORT","OVER","PAYROLL","NET AFTER PAYROLL"]);
- $("reportOutput").innerHTML=`<div class="report-box"><h3>${mode.toUpperCase()} SALES REPORT</h3><p class="muted">${mode==="monthly"?`Monthly summary for ${prefix}`:`Yearly summary for ${prefix}`}</p>${empty}</div>`;
+function reportSalesSet(mode,date){
+ if(mode==="daily")return salesForDate(date);
+ const prefix=mode==="monthly"?date.slice(0,7):date.slice(0,4);
+ return state.sales.filter(s=>String(s.date||"").startsWith(prefix));
 }
+function reportPeriodLabel(mode,date){return mode==="daily"?date:mode==="monthly"?date.slice(0,7):date.slice(0,4)}
+function sumSales(rows){return rows.reduce((t,x)=>t+Number(x.amount||0),0)}
+function breakdownHTML(items,emptyText="No records yet."){
+ if(!items.length)return `<p class="muted">${emptyText}</p>`;
+ const total=items.reduce((t,x)=>t+Number(x.value||0),0)||1;
+ return `<div class="breakdown-list">${items.slice(0,8).map(x=>{const pct=(Number(x.value||0)/total*100);return `<div class="breakdown-row"><div><span>${x.label}</span><b>${money(x.value)}</b></div><div class="breakdown-track"><i style="width:${Math.max(2,pct)}%"></i></div><small>${pct.toFixed(0)}%</small></div>`}).join("")}</div>`;
+}
+function renderReportSummary(f,rows){
+ const tx=rows.length, cars=rows.filter(x=>/carwash|wash/i.test(x.note||"")).length;
+ const cards=[['Total Sales',money(f.totalSale),'blue'],['Cash Sales',money(f.cash||0),'green'],['Expenses',money(f.expenses),'red'],['Cash Remaining',money(f.totalSale-f.expenses-(f.cashRemitted||0)),'gold'],['Transactions',tx,'blue'],['Total Payroll',money(f.payroll||0),'purple'],['Total Commission',money(rows.reduce((t,s)=>{const a=state.attendance.find(x=>x.employeeId===s.employeeId&&x.date===s.date);return t+Number(s.amount||0)*commRate(a?.status||"awol")},0)),'red'],['Cars Washed',cars,'blue']];
+ $("reportSummaryCards").innerHTML=cards.map(c=>`<div class="report-summary-card report-${c[2]}"><span>${c[0]}</span><b>${c[1]}</b></div>`).join("");
+}
+function renderReports(mode){
+ currentReportView=mode;
+ const date=$("reportDate")?.value||today();
+ if($("reportDate"))$("reportDate").value=date;
+ loadDailyReportInputs();
+ const rows=reportSalesSet(mode,date);
+ let f;
+ if(mode==="daily")f=dailyFinancials(date); else f=periodFinancials(mode,mode==="monthly"?date.slice(0,7):date.slice(0,4));
+ renderReportSummary(f,rows);
+ const service={};rows.forEach(s=>{const key=/detail/i.test(s.note||"")?'Detailing':/wax/i.test(s.note||"")?'Wax':/interior/i.test(s.note||"")?'Interior':/add/i.test(s.note||"")?'Add-ons':/carwash|wash/i.test(s.note||"")?'Carwash':'Others';service[key]=(service[key]||0)+Number(s.amount||0)});
+ const payments={};rows.forEach(s=>{const key=s.paymentMethod||'Cash';payments[key]=(payments[key]||0)+Number(s.amount||0)});
+ $("reportSalesBreakdown").innerHTML=breakdownHTML(Object.entries(service).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));
+ $("reportPaymentBreakdown").innerHTML=breakdownHTML(Object.entries(payments).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));
+ $("reportTableTitle").textContent=mode==='daily'?'Daily Sales Transactions':mode==='monthly'?'Monthly Sales Transactions':'Yearly Sales Transactions';
+ $("reportTableSubtitle").textContent=mode==='daily'?`Selected date: ${date}`:mode==='monthly'?`Selected month: ${date.slice(0,7)}`:`Selected year: ${date.slice(0,4)}`;
+ let tableRows;
+ if(mode==='daily')tableRows=rows.slice().sort((a,b)=>String(b.time||'').localeCompare(String(a.time||''))).map(s=>[s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,s.note||'Carwash',money(s.amount),s.paymentMethod||'Cash']);
+ else {const prefix=mode==='monthly'?date.slice(0,7):date.slice(0,4);const periods=new Set(rows.map(s=>String(s.date||'').slice(0,mode==='monthly'?7:4)));tableRows=[...periods].sort().reverse().map(period=>{const rr=rows.filter(s=>String(s.date||'').startsWith(prefix)&&String(s.date||'').slice(0,mode==='monthly'?7:4)===period);return[period,rr.length,money(sumSales(rr)),money(rr.filter(s=>s.paymentMethod==='Cash'||!s.paymentMethod).reduce((t,s)=>t+Number(s.amount||0),0))]});}
+ $("reportOutput").innerHTML=table(tableRows,mode==='daily'?["Time","Employee","Service","Amount","Payment Method"]:[mode==='monthly'?"Month":"Year","Transactions","Total Sales","Cash"]);
+ renderExpenseList(date);
+ const remaining=f.totalSale-f.expenses-(f.cashRemitted||0);$("reportCashResult").textContent=`Remaining: ${money(remaining)}`;$("reportCashDetails").innerHTML=`<span>Expected after expenses: <b>${money(f.expected)}</b></span><span>Remitted: <b>${money(f.cashRemitted||0)}</b></span>${f.hasRemitted&&f.short?`<span class="cash-short">Short: <b>${money(f.short)}</b></span>`:''}${f.hasRemitted&&f.over?`<span class="cash-over">Over: <b>${money(f.over)}</b></span>`:''}`;
+}
+function renderExpenseList(date){
+ const items=expenseItemsFor(date);
+ if(!items.length){$("expenseList").innerHTML='<p class="muted">No custom expenses recorded for this date.</p>';return;}
+ $("expenseList").innerHTML=table(items.slice().reverse().map(x=>[x.category||'Other',x.description||'—',money(x.amount),x.paymentMethod||'Cash',x.notes||'—']),["Category","Description","Amount","Payment","Notes"]);
+}
+function renderBusinessSummary(){
+ const dates=reportDates();const all=state.sales;const expenses=dates.reduce((t,d)=>t+totalExpensesForDate(d),0);const payroll=dates.reduce((t,d)=>t+state.employees.reduce((z,e)=>z+(state.attendance.some(a=>a.date===d&&a.employeeId===e.id)?pay(e,d):0),0),0);const f={totalSale:sumSales(all),cash:dates.reduce((t,d)=>t+Number(state.dailyReports?.[d]?.cash||0),0),expenses,cashRemitted:dates.reduce((t,d)=>t+Number(state.dailyReports?.[d]?.cashRemitted||0),0),payroll};renderReportSummary(f,all);$("reportSalesBreakdown").innerHTML=breakdownHTML(Object.entries(all.reduce((o,s)=>{const k=/detail/i.test(s.note||"")?'Detailing':/wax/i.test(s.note||"")?'Wax':/carwash|wash/i.test(s.note||"")?'Carwash':'Other';o[k]=(o[k]||0)+Number(s.amount||0);return o},{})).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));$("reportPaymentBreakdown").innerHTML=breakdownHTML(Object.entries(all.reduce((o,s)=>{const k=s.paymentMethod||'Cash';o[k]=(o[k]||0)+Number(s.amount||0);return o},{})).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));$("reportTableTitle").textContent='Business Summary';$("reportTableSubtitle").textContent='All available business records';$("reportOutput").innerHTML=table(dates.map(d=>{const x=dailyFinancials(d);return[d,money(x.totalSale),money(x.expenses),money(x.cashRemitted),x.hasRemitted&&x.short?money(x.short):'—',x.hasRemitted&&x.over?money(x.over):'—']}),["Date","Sales","Expenses","Remitted","Short","Over"]);renderExpenseList(date);}
+function renderEmployeeReport(){
+ const rows=state.employees.map(e=>{const sales=sumSales(state.sales.filter(s=>String(s.employeeId)===String(e.id)));const days=state.attendance.filter(a=>String(a.employeeId)===String(e.id)).length;const commission=state.sales.filter(s=>String(s.employeeId)===String(e.id)).reduce((t,s)=>{const a=state.attendance.find(x=>x.employeeId===s.employeeId&&x.date===s.date);return t+Number(s.amount||0)*commRate(a?.status||'awol')},0);return[e.id,e.name,money(sales),days,money(commission)]});$("reportSummaryCards").innerHTML=`<div class="report-summary-card report-blue"><span>Total Employees</span><b>${state.employees.length}</b></div><div class="report-summary-card report-green"><span>Employees With Sales</span><b>${new Set(state.sales.map(s=>String(s.employeeId))).size}</b></div><div class="report-summary-card report-purple"><span>Total Sales</span><b>${money(sumSales(state.sales))}</b></div><div class="report-summary-card report-gold"><span>Total Commission</span><b>${money(rows.reduce((t,r)=>t+Number(String(r[4]).replace(/[^0-9.-]/g,'')),0))}</b></div>`;$("reportSalesBreakdown").innerHTML='<p class="muted">Employee performance is calculated from actual sales and attendance.</p>';$("reportPaymentBreakdown").innerHTML='<p class="muted">Select a date/report period for payment breakdown.</p>';$("reportTableTitle").textContent='Employee Performance';$("reportTableSubtitle").textContent='Sales, attendance and commission';$("reportOutput").innerHTML=table(rows,["ID","Employee","Sales","Attendance Days","Commission"]);renderExpenseList($("reportDate")?.value||today());}
+let currentReportView='daily';
+function makeReport(mode){if(mode==='business')renderBusinessSummary();else if(mode==='employee')renderEmployeeReport();else renderReports(mode);}
+
+function salesDateRows(mode,date){
+ if(mode==='daily')return salesForDate(date);
+ const prefix=mode==='monthly'?date.slice(0,7):date.slice(0,4);return state.sales.filter(s=>String(s.date||'').startsWith(prefix));
+}
+function renderSalesPage(mode='overview'){
+ const date=$("salesViewDate")?.value||today();if($("salesViewDate"))$("salesViewDate").value=date;
+ document.querySelectorAll('[data-sales-view]').forEach(b=>b.classList.toggle('active',b.dataset.salesView===mode));
+ $("salesOverviewView")?.classList.toggle('hidden',mode!=='overview');$("salesPeriodView")?.classList.toggle('hidden',mode==='overview');
+ if(mode==='overview'){
+   const rows=salesForDate(date),total=sumSales(rows),employees=new Set(rows.map(s=>String(s.employeeId))).size;
+   $("salesOverviewTotal").textContent=money(total);$("salesOverviewTransactions").textContent=rows.length;$("salesOverviewAverage").textContent=money(rows.length?total/rows.length:0);$("salesOverviewEmployees").textContent=employees;$("salesOverviewPeriod").textContent=`Selected day • ${date}`;
+   const days=[...new Set([...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));return d.toISOString().slice(0,10)}))];const vals=days.map(d=>sumSales(salesForDate(d)));const max=Math.max(...vals,1);$("salesOverviewTrend").innerHTML=days.map((d,i)=>`<div class="trend-col"><span>${money(vals[i])}</span><i style="height:${Math.max(4,vals[i]/max*150)}px"></i><small>${d.slice(5)}</small></div>`).join('');
+   const service={};rows.forEach(s=>{const k=/detail/i.test(s.note||'')?'Detailing':/wax/i.test(s.note||'')?'Wax':/interior/i.test(s.note||'')?'Interior':/add/i.test(s.note||'')?'Add-ons':/carwash|wash/i.test(s.note||'')?'Carwash':'Others';service[k]=(service[k]||0)+Number(s.amount||0)});$("salesServiceBreakdown").innerHTML=breakdownHTML(Object.entries(service).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));
+   const top=state.employees.map(e=>({name:e.name,sales:rows.filter(s=>String(s.employeeId)===String(e.id)).reduce((t,s)=>t+Number(s.amount||0),0)})).filter(x=>x.sales>0).sort((a,b)=>b.sales-a.sales);$("salesTopEmployees").innerHTML=table(top.map((x,i)=>[i+1,x.name,money(x.sales)]),['#','Employee','Sales']);$("salesRecentTransactions").innerHTML=table(rows.slice().reverse().slice(0,8).map(s=>[s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,s.note||'Carwash',money(s.amount),s.paymentMethod||'Cash']),['Time','Employee','Service','Amount','Payment']);
+ }else{
+   const rows=salesDateRows(mode,date),title=mode==='daily'?'Daily Sales':mode==='monthly'?'Monthly Sales':'Yearly Sales';$("salesPeriodTitle").textContent=title;$("salesPeriodSubtitle").textContent=mode==='daily'?`All transactions for ${date}`:mode==='monthly'?`All transactions for ${date.slice(0,7)}`:`All transactions for ${date.slice(0,4)}`;const total=sumSales(rows);$("salesPeriodSummary").innerHTML=`<div><span>Total Sales</span><b>${money(total)}</b></div><div><span>Transactions</span><b>${rows.length}</b></div><div><span>Average Sale</span><b>${money(rows.length?total/rows.length:0)}</b></div>`;$("salesPeriodTable").innerHTML=table(rows.slice().reverse().map(s=>[s.date,s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,s.note||'Carwash',money(s.amount),s.paymentMethod||'Cash']),['Date','Time','Employee','Service','Amount','Payment']);
+ }
+}
+async function addExpense(){
+ const date=$("expenseDate").value||today(),item={id:crypto.randomUUID?crypto.randomUUID():`exp_${Date.now()}`,category:$("expenseCategory").value,description:$("expenseDescription").value.trim(),amount:Number($("expenseAmount").value||0),paymentMethod:$("expensePayment").value,notes:$("expenseNotes").value.trim(),createdAtISO:new Date().toISOString()};if(!item.amount||item.amount<0){alert('Please enter a valid expense amount.');return;}const items=[...expenseItemsFor(date),item];await saveReportRecord(date,{expenseItems:items,expenses:items.reduce((t,x)=>t+Number(x.amount||0),0)});$("expenseForm").reset();$("expenseDate").value=date;$("expenseModal").classList.add('hidden');renderReports(currentReportView);
+}
+function exportCurrentTable(kind){const source=kind==='sales'?$("salesPeriodTable")||$("salesRecentTransactions"):$("reportOutput");const tableEl=source?.querySelector('table');if(!tableEl){alert('No table data to export.');return;}const csv=[...tableEl.rows].map(r=>[...r.cells].map(c=>'"'+c.textContent.replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`big-guys-${kind}-${today()}.csv`;a.click();URL.revokeObjectURL(url);}
 $("dtrEmployeeSelect")?.addEventListener("change",e=>{selectedDtrEmployeeId=e.target.value||"";renderEmployeeDtr(selectedDtrEmployeeId);});
 $("reportDate").value=today();
-$("reportDate").addEventListener("change",loadDailyReportInputs);
-$("saveDailyReport").onclick=saveDailyReport;
-
+$("salesViewDate").value=today();
 
 function startClock(){
  const tick=()=>{const n=new Date();const time=n.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit",second:"2-digit"});const date=n.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric",year:"numeric"});const day=n.toLocaleDateString("en-PH",{weekday:"long"});const long=n.toLocaleDateString("en-PH",{month:"long",day:"numeric",year:"numeric"});if($("digitalClock"))$("digitalClock").textContent=time;if($("rightDate"))$("rightDate").textContent=date;if($("headerDay"))$("headerDay").textContent=day;if($("headerDate"))$("headerDate").textContent=long};tick();clearInterval(window.bigGuysClock);window.bigGuysClock=setInterval(tick,1000);
@@ -594,7 +660,18 @@ function activateTab(tab){
 }
 document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();if(btn.id==="salesNav"){const sub=document.getElementById("salesSubnav");sub?.classList.toggle("open");activateTab("sales");}else activateTab(btn.dataset.tab)}));
 document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
-document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
+document.querySelectorAll("[data-sales-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("sales");renderSalesPage(btn.dataset.salesMode);document.querySelectorAll('[data-sales-view]').forEach(b=>b.classList.toggle('active',b.dataset.salesMode==='overview'&&b.dataset.salesMode===btn.dataset.salesMode));}));
+document.querySelectorAll('[data-sales-view]').forEach(btn=>btn.addEventListener('click',()=>renderSalesPage(btn.dataset.salesView)));
+document.querySelectorAll('[data-report-view]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-report-view]').forEach(b=>b.classList.toggle('active',b===btn));makeReport(btn.dataset.reportView);}));
+$("salesViewDate")?.addEventListener('change',()=>renderSalesPage(document.querySelector('[data-sales-view].active')?.dataset.salesView||'overview'));
+$("reportDate")?.addEventListener('change',()=>makeReport(currentReportView));
+$("salesAddQuick")?.addEventListener('click',()=>document.getElementById('saleAmount')?.focus());
+$("salesExportBtn")?.addEventListener('click',()=>exportCurrentTable('sales'));
+$("reportExportBtn")?.addEventListener('click',()=>exportCurrentTable('report'));
+$("addExpenseBtn")?.addEventListener('click',()=>{$("expenseDate").value=$("reportDate").value||today();$("expenseModal").classList.remove('hidden');});
+$("closeExpenseModal")?.addEventListener('click',()=>$("expenseModal").classList.add('hidden'));$("cancelExpense")?.addEventListener('click',()=>$("expenseModal").classList.add('hidden'));$("expenseForm")?.addEventListener('submit',e=>{e.preventDefault();addExpense();});
+$("reportPrintBtn")?.addEventListener('click',()=>window.print());$("salesPrintBtn")?.addEventListener('click',()=>window.print());
+
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;state=remote;cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
 async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }

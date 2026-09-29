@@ -18,9 +18,10 @@
       <button type="button" class="side-nav" data-tab="attendance"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span>DTR / Attendance</span></button>
       <button type="button" class="side-nav sales-parent" data-tab="sales" id="salesNav"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V3"/></svg></span><span>Sales</span><span class="nav-chevron">⌄</span></button>
       <div class="sales-subnav" id="salesSubnav">
-        <button type="button" data-report-mode="daily">Daily Report</button>
-        <button type="button" data-report-mode="monthly">Monthly Report</button>
-        <button type="button" data-report-mode="yearly">Yearly Report</button>
+        <button type="button" data-sales-mode="overview">Overview</button>
+        <button type="button" data-sales-mode="daily">Daily Sales</button>
+        <button type="button" data-sales-mode="monthly">Monthly Sales</button>
+        <button type="button" data-sales-mode="yearly">Yearly Sales</button>
       </div>
       <button type="button" class="side-nav" data-tab="payroll"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M7 6V4h10v2"/><circle cx="12" cy="13" r="2.5"/><path d="M12 10.5v-1M12 16.5v-1"/></svg></span><span>Payroll</span></button>
       <button type="button" class="side-nav" data-tab="reports"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h6M9 16h6"/></svg></span><span>Reports</span><span class="nav-chevron">⌄</span></button>
@@ -105,9 +106,48 @@
   </div>
   <div class="card inner" style="margin-top:10px"><div class="card-heading"><h2>Today's Attendance</h2></div><div id="attendanceTable"></div></div>
 </section>
-        <section id="sales" class="tab-panel hidden"><div class="card inner"><h2>Sales</h2><form id="salesForm" class="form-grid"><select id="saleEmployee" required></select><input id="saleAmount" type="number" min="0" step=".01" placeholder="Sale amount ₱" required><input id="saleNote" placeholder="Service / note"><button type="submit">ADD SALE</button></form><div id="salesTable"></div></div></section>
+        <section id="sales" class="tab-panel hidden">
+  <div class="sales-page-head">
+    <div><span class="section-kicker">SALES MANAGEMENT</span><h2>Sales Overview</h2><p class="muted">Connected to your live sales transactions, employees, services and payment records.</p></div>
+    <div class="sales-head-actions"><input id="salesViewDate" type="date"><button type="button" id="salesPrintBtn" class="small-action">PRINT</button></div>
+  </div>
+  <div class="sales-tabs" id="salesTabs"><button type="button" class="active" data-sales-view="overview">Overview</button><button type="button" data-sales-view="daily">Daily Sales</button><button type="button" data-sales-view="monthly">Monthly Sales</button><button type="button" data-sales-view="yearly">Yearly Sales</button></div>
+  <div id="salesOverviewView" class="sales-view">
+    <div class="sales-kpi-grid">
+      <div class="sales-kpi sales-kpi-blue"><span>Total Sales</span><b id="salesOverviewTotal">₱0.00</b><small id="salesOverviewPeriod">Selected day</small></div>
+      <div class="sales-kpi sales-kpi-green"><span>Transactions</span><b id="salesOverviewTransactions">0</b><small>Recorded sales</small></div>
+      <div class="sales-kpi sales-kpi-gold"><span>Average Sale</span><b id="salesOverviewAverage">₱0.00</b><small>Per transaction</small></div>
+      <div class="sales-kpi sales-kpi-purple"><span>Employees With Sales</span><b id="salesOverviewEmployees">0</b><small>Active sales staff</small></div>
+    </div>
+    <div class="sales-overview-grid">
+      <div class="dashboard-card sales-trend-card"><div class="card-heading"><div><h2>Sales Trend</h2><span class="muted">Last 7 recorded days</span></div></div><div id="salesOverviewTrend" class="sales-overview-trend"></div></div>
+      <div class="dashboard-card sales-service-card"><div class="card-heading"><div><h2>Sales by Service</h2><span class="muted">Based on actual transaction notes</span></div></div><div id="salesServiceBreakdown"></div></div>
+    </div>
+    <div class="sales-overview-grid lower-sales-grid">
+      <div class="dashboard-card"><div class="card-heading"><h2>Top Employees by Sales</h2></div><div id="salesTopEmployees"></div></div>
+      <div class="dashboard-card"><div class="card-heading"><h2>Recent Sales Transactions</h2><button type="button" class="small-action" id="salesAddQuick">+ ADD SALE</button></div><div id="salesRecentTransactions"></div></div>
+    </div>
+  </div>
+  <div id="salesPeriodView" class="sales-view hidden">
+    <div class="dashboard-card inner"><div class="card-heading"><div><h2 id="salesPeriodTitle">Daily Sales</h2><p id="salesPeriodSubtitle" class="muted">Detailed sales records.</p></div><button type="button" class="small-action" id="salesExportBtn">EXPORT CSV</button></div><div id="salesPeriodSummary" class="period-summary-grid"></div><div id="salesPeriodTable" class="sales-period-table"></div></div>
+  </div>
+  <div class="dashboard-card sales-entry-card"><div class="card-heading"><div><h2>Add Sale</h2><span class="muted">Every saved sale feeds the overview and reports.</span></div></div><form id="salesForm" class="form-grid sales-form"><select id="saleEmployee" required></select><input id="saleAmount" type="number" min="0" step=".01" placeholder="Sale amount ₱" required><input id="saleNote" placeholder="Service / note"><select id="salePayment"><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Maya">Maya</option><option value="Other">Other</option></select><button type="submit">ADD SALE</button></form><div id="salesTable"></div></div>
+</section>
         <section id="payroll" class="tab-panel hidden"><div class="card inner"><h2>Payroll</h2><p class="muted">Early/on-time = 40%, Late = 35%, AWOL = 30%. Daily base rate remains the minimum.</p><div id="payrollTable"></div></div></section>
-        <section id="reports" class="tab-panel hidden"><div class="card inner"><h2>Sales Reports</h2><div class="report-controls"><input id="reportDate" type="date"><button onclick="makeReport('daily')">DAILY</button><button onclick="makeReport('monthly')">MONTHLY</button><button onclick="makeReport('yearly')">YEARLY</button></div><div class="daily-reconciliation"><h3>Daily Cash Reconciliation</h3><p class="muted">Total Sale is calculated automatically from the Sales entries for the selected date. Enter the Cash, Expenses, and actual Cash Remitted to calculate Short/Over.</p><div class="reconciliation-grid"><div><label>Cash</label><input id="reportCash" type="number" min="0" step=".01" placeholder="₱0.00"></div><div><label>Expenses</label><input id="reportExpenses" type="number" min="0" step=".01" placeholder="₱0.00"></div><div><label>Cash Remitted</label><input id="reportCashRemitted" type="number" min="0" step=".01" placeholder="₱0.00"></div><div class="reconciliation-action"><label>&nbsp;</label><button id="saveDailyReport">SAVE DAILY REPORT</button></div></div></div><div id="reportOutput"></div></div></section>
+        <section id="reports" class="tab-panel hidden">
+  <div class="reports-page-head"><div><span class="section-kicker">BUSINESS REPORTING</span><h2>Reports</h2><p class="muted">Detailed business, cash, expense, payroll and employee performance reporting.</p></div><div class="report-head-actions"><input id="reportDate" type="date"><button type="button" class="small-action" id="reportPrintBtn">PRINT</button></div></div>
+  <div class="report-tabs" id="reportTabs"><button type="button" class="active" data-report-view="daily">Daily</button><button type="button" data-report-view="monthly">Monthly</button><button type="button" data-report-view="yearly">Yearly</button><button type="button" data-report-view="business">Business Summary</button><button type="button" data-report-view="employee">Employee Performance</button></div>
+  <div class="report-summary-grid" id="reportSummaryCards"></div>
+  <div class="reports-main-grid">
+    <div class="dashboard-card report-chart-card"><div class="card-heading"><div><h2>Sales Breakdown</h2><span class="muted">Actual transaction data</span></div></div><div id="reportSalesBreakdown"></div></div>
+    <div class="dashboard-card report-chart-card"><div class="card-heading"><div><h2>Payment Method</h2><span class="muted">Actual payment records</span></div></div><div id="reportPaymentBreakdown"></div></div>
+  </div>
+  <div class="dashboard-card report-transactions-card"><div class="card-heading"><div><h2 id="reportTableTitle">Daily Sales Transactions</h2><span id="reportTableSubtitle" class="muted">Selected date</span></div><button type="button" class="small-action" id="reportExportBtn">EXPORT CSV</button></div><div id="reportOutput"></div></div>
+  <div class="reports-bottom-grid">
+    <div class="dashboard-card expense-card"><div class="card-heading"><div><h2>Expenses Summary</h2><span class="muted">Custom expenses connected to cash reconciliation</span></div><button type="button" class="small-action" id="addExpenseBtn">+ ADD EXPENSE</button></div><div id="expenseList"></div></div>
+    <div class="dashboard-card remittance-card"><div class="card-heading"><div><h2>Cash Remittance</h2><span class="muted">Track expected vs actual cash</span></div><button type="button" class="small-action" id="saveDailyReport">SAVE REPORT</button></div><div class="reconciliation-grid report-recon"><div><label>Cash</label><input id="reportCash" type="number" min="0" step=".01" placeholder="₱0.00"></div><div><label>Cash Remitted</label><input id="reportCashRemitted" type="number" min="0" step=".01" placeholder="₱0.00"></div><div><label>Notes</label><input id="reportRemittanceNotes" placeholder="Optional notes"></div><div class="reconciliation-action"><label>&nbsp;</label><span id="reportCashResult" class="cash-result">Remaining: ₱0.00</span></div></div><div id="reportCashDetails" class="cash-details"></div></div>
+  </div>
+</section>
         <section id="settings" class="tab-panel hidden"><div class="card inner"><h2>Settings</h2><p class="muted">Administrator configuration area.</p></div></section>
       </div>
 
@@ -123,7 +163,7 @@
   </main>
 </div>
 
-<div id="enrollmentModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="enrollmentModalTitle">
+<div id="expenseModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle"><div class="enrollment-modal-backdrop"></div><div class="enrollment-modal-card expense-modal-card"><div class="enrollment-modal-head"><div><span class="section-kicker">BUSINESS EXPENSE</span><h2 id="expenseModalTitle">Add Expense</h2><p class="muted">This expense will be included in the selected report date.</p></div><button type="button" id="closeExpenseModal" class="modal-close" aria-label="Close">×</button></div><form id="expenseForm" class="form-grid expense-form"><div class="field"><label for="expenseCategory">Category</label><select id="expenseCategory"><option>Supplies</option><option>Maintenance</option><option>Utilities</option><option>Payroll Adjustment</option><option>Other</option></select></div><div class="field"><label for="expenseDescription">Description</label><input id="expenseDescription" placeholder="What was purchased or paid?"></div><div class="field"><label for="expenseAmount">Amount</label><input id="expenseAmount" type="number" min="0" step=".01" required placeholder="₱0.00"></div><div class="field"><label for="expensePayment">Payment Method</label><select id="expensePayment"><option>Cash</option><option>GCash</option><option>Maya</option><option>Other</option></select></div><div class="field"><label for="expenseDate">Date</label><input id="expenseDate" type="date" required></div><div class="field"><label for="expenseNotes">Notes</label><input id="expenseNotes" placeholder="Optional notes"></div><div class="expense-form-actions"><button type="button" id="cancelExpense" class="small-action">CANCEL</button><button type="submit">SAVE EXPENSE</button></div></form></div></div><div id="enrollmentModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="enrollmentModalTitle">
   <div class="enrollment-modal-backdrop"></div>
   <div class="enrollment-modal-card">
     <div class="enrollment-modal-head">
