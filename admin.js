@@ -14,6 +14,29 @@ function syncStateFromStorage(){
 }
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
+// Employee IDs: YYYYMM + monthly hire sequence. The sequence never reuses an
+// existing number for that month, so deleting an employee will not recycle an ID.
+// Example: first hire in September 2026 = 20260901, next = 20260902.
+function nextEmployeeId(hireDate){
+ const m=/^(\d{4})-(\d{2})-\d{2}$/.exec(hireDate||"");
+ if(!m){const d=today(); return nextEmployeeId(d);}
+ const prefix=m[1]+m[2];
+ let max=0;
+ state.employees.forEach(e=>{
+   const id=String(e?.id||"");
+   if(id.startsWith(prefix)){
+     const n=Number(id.slice(prefix.length));
+     if(Number.isFinite(n)&&n>max)max=n;
+   }
+ });
+ const next=max+1;
+ return prefix+String(next).padStart(2,"0");
+}
+function updateEmployeeIdPreview(){
+ const date=$("empHireDate")?.value;
+ const input=$("empId");
+ if(input)input.value=date?nextEmployeeId(date):"";
+}
 const baseRate=t=>t==="full"?250:t==="semi"?200:150;
 const commRate=s=>s==="late"?.35:s==="awol"?.30:.40;
 function table(rows,heads){if(!rows.length)return'<p class="muted">No records yet.</p>';return`<table class="table"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
@@ -109,6 +132,12 @@ async function loadModels(){
  $("enrollStatus").textContent="Could not load face models. Check your internet connection and refresh.";
  return false;
 }
+if($("empHireDate")){
+ $("empHireDate").value=today();
+ $("empHireDate").addEventListener("change",updateEmployeeIdPreview);
+ updateEmployeeIdPreview();
+}
+
 $("loginBtn").onclick=async()=>{
   const email=$("adminEmail").value.trim(),password=$("adminPassword").value;
   $("loginBtn").disabled=true;$("loginError").textContent="Signing in…";
@@ -128,7 +157,18 @@ $("logoutBtn").onclick=async()=>{
   try{await BigGuysCloud.adminLogout();}catch(e){console.warn(e)}
   $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";document.body.classList.remove("logged-in");
 };
-$("employeeForm").onsubmit=e=>{e.preventDefault();const id=$("empId").value.trim();if(state.employees.some(x=>x.id===id))return alert("Employee ID already exists.");state.employees.push({id,name:$("empName").value.trim(),type:$("empType").value,start:$("empStart").value});save();e.target.reset();$("empStart").value="08:00";refresh()};
+$("employeeForm").onsubmit=e=>{
+ e.preventDefault();
+ const hireDate=$("empHireDate").value||today();
+ const id=nextEmployeeId(hireDate);
+ state.employees.push({id,name:$("empName").value.trim(),type:$("empType").value,start:$("empStart").value,hireDate});
+ save();
+ e.target.reset();
+ $("empStart").value="08:00";
+ $("empHireDate").value=today();
+ updateEmployeeIdPreview();
+ refresh();
+};
 $("salesForm").onsubmit=e=>{e.preventDefault();state.sales.push({date:today(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value});save();e.target.reset();refresh()};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 let enrollmentRunning=false,enrollmentSamples=[];
