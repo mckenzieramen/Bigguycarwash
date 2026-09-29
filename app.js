@@ -43,9 +43,17 @@ function faceIsInsideOval(d){
 }
 function bestEmployee(descriptor){
  let best=null,bestDistance=Infinity;
- for(const employee of state.employees){
-   const records=normalizeFaceRecords(state.faces[employee.id]);
-   for(const stored of records){const d=faceDistance(Array.from(descriptor),stored);if(d<bestDistance){bestDistance=d;best=employee}}
+ const employeesById=new Map((state.employees||[]).map(e=>[String(e?.id),e]));
+ const faceEntries=Object.entries(state.faces||{});
+ for(const [faceEmployeeId,rawRecords] of faceEntries){
+   const employee=employeesById.get(String(faceEmployeeId));
+   if(!employee)continue;
+   const records=normalizeFaceRecords(rawRecords);
+   for(const stored of records){
+     if(!Array.isArray(stored)||stored.length!==128)continue;
+     const d=faceDistance(Array.from(descriptor),stored);
+     if(d<bestDistance){bestDistance=d;best=employee;}
+   }
  }
  return {employee:best,distance:bestDistance};
 }
@@ -154,4 +162,26 @@ function record(type){
  }
  clearAfterAttendance("🔴 Attendance saved — scanning for the next employee…");
 }
-$("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); }); } } window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));window.addEventListener("load",async()=>{await initCloud();startCamera();});
+$("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");async function initCloud(){
+ if(!window.BigGuysCloud)return false;
+ const ok=await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); });
+ if(!ok){
+   $("cameraStatus").textContent="Firebase face records could not be loaded. Check your connection and try again.";
+   setOval("bad");
+   return false;
+ }
+ try{
+   // Always fetch a fresh cloud state immediately before starting the scanner.
+   // This prevents an empty/stale local cache from making an enrolled employee
+   // appear as "not enrolled" on another device.
+   if(window.BigGuysCloud.refresh){ state=await window.BigGuysCloud.refresh(); cacheState(); }
+ }catch(err){
+   console.error("Fresh face-record sync failed:",err);
+   $("cameraStatus").textContent="Could not load enrolled face records from Firebase.";
+   setOval("bad");
+   return false;
+ }
+ return true;
+}
+window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
+window.addEventListener("load",async()=>{if(await initCloud())startCamera();});
