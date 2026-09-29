@@ -161,7 +161,7 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  refreshDtrSelector();
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
- $("payrollTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);const rate=commRate(a?.status||"awol");const commission=sales*rate;const minimum=baseRate(e.type);return[e.name,e.type,a?.status||"AWOL",money(sales),`${Math.round(rate*100)}%`,money(commission),money(minimum),money(Math.max(minimum,commission))]}),["Employee","Type","Status","Sales","Commission %","Commission","Minimum Pay","Daily Pay"]);
+ renderPayroll();
  const top=state.employees.map(e=>({name:e.name,sales:state.sales.filter(s=>s.date===d&&s.employeeId===e.id).reduce((t,s)=>t+Number(s.amount||0),0)})).filter(x=>x.sales>0).sort((a,b)=>b.sales-a.sales);
  $("topSalesToday").innerHTML=table(top.slice(0,6).map((x,i)=>[i+1,x.name,money(x.sales)]),["#","Employee","Sales"]);
  const types={full:"Full Time",semi:"Semi Full Time",part:"Part Time"}; const counts={};state.employees.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);$("employeeTypeSummary").innerHTML=table(Object.keys(counts).map(k=>[types[k]||k,counts[k]]),["Type","Count"]);
@@ -439,6 +439,44 @@ function dtrMinutes(a){
  return null;
 }
 function dtrHours(a){const mins=dtrMinutes(a);return mins==null?"—":(mins/60).toFixed(2)+" hrs";}
+function payrollMonthValue(){ return $("payrollMonth")?.value || today().slice(0,7); }
+function payrollDates(month){
+ const [y,m]=month.split("-").map(Number); if(!y||!m)return [];
+ const out=[]; const last=new Date(y,m,0).getDate();
+ for(let d=1;d<=last;d++)out.push(`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
+ return out;
+}
+function renderPayroll(){
+ const month=payrollMonthValue(); if($("payrollMonth"))$("payrollMonth").value=month;
+ const dates=payrollDates(month);
+ const rows=state.employees.map(e=>{
+   let accumulated=0,days=0,totalSales=0,totalCommission=0;
+   dates.forEach(date=>{
+     const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===date);
+     if(!a)return;
+     days++;
+     const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);
+     const rate=commRate(a.status||"awol"), commission=sales*rate;
+     totalSales+=sales; totalCommission+=commission; accumulated+=Math.max(baseRate(e.type),commission);
+   });
+   return {e,days,totalSales,totalCommission,accumulated};
+ }).sort((a,b)=>b.accumulated-a.accumulated||b.totalSales-a.totalSales);
+ const total=rows.reduce((t,r)=>t+r.accumulated,0);
+ const worked=rows.reduce((t,r)=>t+r.days,0);
+ if($("payrollPeriodLabel"))$("payrollPeriodLabel").textContent=`${month} • ${dates[0]} to ${dates[dates.length-1]}`;
+ if($("payrollSummary"))$("payrollSummary").innerHTML=`<div><span>Monthly Payroll</span><b>${money(total)}</b></div><div><span>Employees</span><b>${rows.length}</b></div><div><span>Work / Attendance Days</span><b>${worked}</b></div><div><span>Highest Accumulated</span><b>${money(rows[0]?.accumulated||0)}</b></div>`;
+ if($("payrollTable"))$("payrollTable").innerHTML=table(rows.map((r,i)=>[i+1,r.e.name,r.e.type,r.days,money(r.totalSales),money(r.totalCommission),money(r.accumulated)]),["#","Employee","Type","Days Worked","Sales","Commission","Accumulated Pay"]);
+ let running={}; const daily=[];
+ dates.forEach(date=>state.employees.forEach(e=>{
+   const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===date); if(!a)return;
+   const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);
+   const rate=commRate(a.status||"awol"), commission=sales*rate, dailyPay=Math.max(baseRate(e.type),commission);
+   running[e.id]=(running[e.id]||0)+dailyPay;
+   daily.push([date,e.name,statusBadge(a.status||"awol"),money(sales),`${Math.round(rate*100)}%`,money(dailyPay),money(running[e.id])]);
+ }));
+ daily.sort((a,b)=>a[0].localeCompare(b[0])||a[1].localeCompare(b[1]));
+ if($("payrollDailyTable"))$("payrollDailyTable").innerHTML=daily.length?table(daily,["Date","Employee","Status","Sales","Commission %","Daily Pay","Accumulated"]):'<p class="muted">No attendance/work records for this month.</p>';
+}
 function renderEmployeeDtr(id){
  const box=$("employeeDtrProfile"); if(!box)return;
  const e=state.employees.find(x=>String(x.id)===String(id));
@@ -626,8 +664,16 @@ function salesDateRows(mode,date){
  if(mode==='daily')return salesForDate(date);
  const prefix=mode==='monthly'?date.slice(0,7):date.slice(0,4);return state.sales.filter(s=>String(s.date||'').startsWith(prefix));
 }
+function renderSalesExpenseSummary(date){
+ const gross=sumSales(salesForDate(date));
+ const expenses=totalExpensesForDate(date);
+ const net=gross-expenses;
+ const el=$("salesExpenseSummary");
+ if(el)el.innerHTML=`<div><span>Gross Sales</span><b>${money(gross)}</b></div><div><span>Expenses</span><b class="expense-value">− ${money(expenses)}</b></div><div><span>Net / Expected Remittance</span><b>${money(net)}</b></div>`;
+}
 function renderSalesPage(mode='overview'){
  const date=$("salesViewDate")?.value||today();if($("salesViewDate"))$("salesViewDate").value=date;
+ renderSalesExpenseSummary(date);
  document.querySelectorAll('[data-sales-view]').forEach(b=>b.classList.toggle('active',b.dataset.salesView===mode));
  $("salesOverviewView")?.classList.toggle('hidden',mode!=='overview');$("salesPeriodView")?.classList.toggle('hidden',mode==='overview');
  if(mode==='overview'){
@@ -645,8 +691,12 @@ async function addExpense(){
 }
 function exportCurrentTable(kind){const source=kind==='sales'?$("salesPeriodTable")||$("salesRecentTransactions"):$("reportOutput");const tableEl=source?.querySelector('table');if(!tableEl){alert('No table data to export.');return;}const csv=[...tableEl.rows].map(r=>[...r.cells].map(c=>'"'+c.textContent.replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`big-guys-${kind}-${today()}.csv`;a.click();URL.revokeObjectURL(url);}
 $("dtrEmployeeSelect")?.addEventListener("change",e=>{selectedDtrEmployeeId=e.target.value||"";renderEmployeeDtr(selectedDtrEmployeeId);});
+$("payrollMonth")?.addEventListener("change",renderPayroll);
+$("salesViewDate")?.addEventListener("change",()=>renderSalesPage(document.querySelector("[data-sales-view].active")?.dataset.salesView||"overview"));
+$("salesExpenseBtn")?.addEventListener("click",()=>{ $("reportDate").value=$("salesViewDate")?.value||today(); $("expenseDate").value=$("salesViewDate")?.value||today(); $("expenseModal").classList.remove("hidden"); });
 $("reportDate").value=today();
 $("salesViewDate").value=today();
+$("payrollMonth").value=today().slice(0,7);
 
 function startClock(){
  const tick=()=>{const n=new Date();const time=n.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit",second:"2-digit"});const date=n.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric",year:"numeric"});const day=n.toLocaleDateString("en-PH",{weekday:"long"});const long=n.toLocaleDateString("en-PH",{month:"long",day:"numeric",year:"numeric"});if($("digitalClock"))$("digitalClock").textContent=time;if($("rightDate"))$("rightDate").textContent=date;if($("headerDay"))$("headerDay").textContent=day;if($("headerDate"))$("headerDate").textContent=long};tick();clearInterval(window.bigGuysClock);window.bigGuysClock=setInterval(tick,1000);

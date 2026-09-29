@@ -100,3 +100,14 @@ V44 PAYROLL UPDATE — 2026-09-30
 - Actual daily pay uses the higher of commission earnings or the applicable minimum pay.
 - Payroll table now displays Commission %, Commission, Minimum Pay, and Daily Pay.
 - Only admin.js and admin.html were changed for this request.
+
+V45 — 2026-09-30 Payroll Monthly Accumulation + Sales Expenses + Premium Logo Polish
+- Payroll now has a selectable monthly pay period.
+- Monthly accumulated pay is calculated from actual DTR attendance only; no attendance/work = ₱0.
+- Daily accumulation table shows each worked day and running monthly accumulated pay.
+- Monthly payroll summary is sorted highest accumulated pay to lowest.
+- New month starts a fresh displayed accumulation while prior DTR/history remains intact.
+- Sales page now shows Gross Sales, Expenses, and Net/Expected Remittance for the selected date, with Add Expense opening the existing expense workflow.
+- Premium visual polish applied to the existing Big Guy's logo presentation without changing the logo asset or core layout.
+- Existing payroll rates retained: Full ₱250, Semi ₱200, Part ₱150; Early/On Time 40%, Late 35%, AWOL/Absent 30%.
+- No-work/no-attendance rule retained: ₱0 for that day.
