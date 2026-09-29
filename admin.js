@@ -509,55 +509,6 @@ async function deleteEmployee(id){
  }
 }
 
-
-let salesViewMode="daily";
-function salesInRange(mode){
- const d=$("salesViewDate")?.value||today();
- if(mode==="daily") return {label:dateLabel(d), sales:state.sales.filter(s=>s.date===d), dates:[d]};
- if(mode==="monthly"){
-   const m=$("salesViewMonth")?.value||d.slice(0,7);
-   const dates=reportDates().filter(x=>x.startsWith(m));
-   return {label:new Date(m+"-01T00:00:00").toLocaleDateString("en-PH",{month:"long",year:"numeric"}), sales:state.sales.filter(s=>s.date?.startsWith(m)), dates};
- }
- const y=String($('salesViewYear')?.value||d.slice(0,4));
- const dates=reportDates().filter(x=>x.startsWith(y));
- return {label:y,sales:state.sales.filter(s=>s.date?.startsWith(y)),dates};
-}
-function renderSalesCenter(mode=salesViewMode){
- salesViewMode=mode;
- const d=today();
- if($("salesViewDate")&&!$("salesViewDate").value)$("salesViewDate").value=d;
- if($("salesViewMonth")&&!$("salesViewMonth").value)$("salesViewMonth").value=d.slice(0,7);
- if($("salesViewYear")&&!$("salesViewYear").value)$("salesViewYear").value=d.slice(0,4);
- $("salesModuleTitle") && ($("salesModuleTitle").textContent=mode==="daily"?"Daily Sales":mode==="monthly"?"Monthly Sales":"Yearly Sales");
- $("salesDateLabel")?.classList.toggle("hidden",mode!=="daily");
- $("salesMonthLabel")?.classList.toggle("hidden",mode!=="monthly");
- $("salesYearLabel")?.classList.toggle("hidden",mode!=="yearly");
- document.querySelectorAll("[data-sales-mode]").forEach(b=>b.classList.toggle("active",b.dataset.salesMode===mode));
- const data=salesInRange(mode), total=data.sales.reduce((t,s)=>t+Number(s.amount||0),0);
- const employees=new Set(data.sales.map(s=>s.employeeId).filter(Boolean)).size;
- const tx=data.sales.length;
- const expenses=mode==="daily"?(state.dailyReports[data.dates[0]]?.expenses||0):data.dates.reduce((t,x)=>t+Number(state.dailyReports[x]?.expenses||0),0);
- const remitted=mode==="daily"?state.dailyReports[data.dates[0]]?.cashRemitted:null;
- const cards=[['TOTAL SALES',money(total)],['TRANSACTIONS',tx],['EMPLOYEES WITH SALES',employees],['EXPENSES',money(expenses)]];
- if($("salesSummaryCards"))$("salesSummaryCards").innerHTML=cards.map(c=>`<div class="sales-summary-card"><span>${c[0]}</span><b>${c[1]}</b></div>`).join("");
- let html='';
- if(mode==="daily"){
-   const rows=data.sales.slice().sort((a,b)=>String(b.time||"").localeCompare(String(a.time||""))).map(s=>[s.time||"—",state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId||"—",s.note||"Carwash",money(s.amount)]);
-   html=`<div class="sales-report-box"><div class="sales-report-title"><div><h3>DAILY SALES</h3><p class="muted">${data.label}</p></div><strong>${money(total)}</strong></div>${table(rows,["TIME","EMPLOYEE","SERVICE / NOTE","AMOUNT"])}</div>`;
-   if(remitted!==null&&remitted!==undefined) html+=`<div class="sales-recon-strip"><span>Cash Remitted</span><b>${money(remitted)}</b><span>Cash Remaining</span><b>${money(Number(remitted)-Number(expenses||0))}</b></div>`;
- } else {
-   const rows=data.dates.slice().sort().map(date=>{const daySales=state.sales.filter(s=>s.date===date).reduce((t,s)=>t+Number(s.amount||0),0);const r=state.dailyReports[date]||{};return[date,money(daySales),money(r.cash||0),money(r.expenses||0),r.cashRemitted==null?"—":money(r.cashRemitted)];});
-   const header=mode==="monthly"?"MONTHLY SALES":"YEARLY SALES";
-   html=`<div class="sales-report-box"><div class="sales-report-title"><div><h3>${header}</h3><p class="muted">${data.label}</p></div><strong>${money(total)}</strong></div>${table(rows,["DATE","TOTAL SALES","CASH","EXPENSES","CASH REMITTED"])}</div>`;
- }
- $("salesViewOutput") && ($("salesViewOutput").innerHTML=html);
-}
-function exportSalesCsv(){
- const data=salesInRange(salesViewMode);const rows=[["Date","Time","Employee","Service / Note","Amount"],...data.sales.map(s=>[s.date,s.time||"",state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId||"",s.note||"",Number(s.amount||0)])];
- const csv=rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=`big-guys-${salesViewMode}-sales.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-}
-
 function reportDates(){
  const dates=new Set();
  state.sales.forEach(s=>{if(s.date)dates.add(s.date)});
@@ -639,17 +590,16 @@ function activateTab(tab){
  document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));
  const panel=$(tab);if(panel)panel.classList.remove("hidden");
  if(tab!=="sales")document.getElementById("salesSubnav")?.classList.remove("open");
- if(tab==="sales")renderSalesCenter(salesViewMode);
  document.getElementById("adminSidebar")?.classList.remove("open");
 }
 document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();if(btn.id==="salesNav"){const sub=document.getElementById("salesSubnav");sub?.classList.toggle("open");activateTab("sales");}else activateTab(btn.dataset.tab)}));
 document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
-document.querySelectorAll("[data-sales-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("sales");renderSalesCenter(btn.dataset.salesMode);document.getElementById("salesSubnav")?.classList.add("open");}));
+document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;state=remote;cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
 async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
 setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); window.addEventListener("load",initCloud);
-$("salesViewDate")?.addEventListener("change",()=>renderSalesCenter("daily"));$("salesViewMonth")?.addEventListener("change",()=>renderSalesCenter("monthly"));$("salesViewYear")?.addEventListener("change",()=>renderSalesCenter("yearly"));$("salesPrintBtn")?.addEventListener("click",()=>window.print());$("salesExportBtn")?.addEventListener("click",exportSalesCsv);$("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
+$("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));
 
 setInterval(()=>{const el=$("cloudStatus");if(!el)return;const c=window.BIGGUYS_CLOUD||{};if(c.ready&&c.lastSyncError)el.textContent="Cloud sync: ERROR — "+(c.lastSyncError.message||"write/read failed");else if(c.ready)el.textContent="Cloud sync: CONNECTED to Firebase";else if(c.status==="error")el.textContent="Cloud sync: ERROR — "+(c.error?.message||c.lastSyncError?.message||"Firebase connection failed");else if(c.status==="authenticated")el.textContent="Cloud sync: authenticated — starting Firestore…";else el.textContent=window.BigGuysCloud?.configured?"Cloud sync: waiting for Admin login":"Cloud sync: local mode";},1000);

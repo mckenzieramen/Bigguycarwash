@@ -78,3 +78,6 @@ V39 - 2026-09-29
 - TIME IN/TIME OUT controls remain available so the employee can complete the punch.
 - After a successful punch, the recognition is cleared and the scanner can accept the next employee.
 - Existing once-only Time In/Time Out and voice confirmation behavior preserved.
+
+V42 RESTORE NOTE
+Restored exactly to the V40 project baseline after the V41 Sales redesign was rejected. No Sales redesign changes are retained.
