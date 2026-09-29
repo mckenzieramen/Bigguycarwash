@@ -223,10 +223,10 @@ function averageDescriptor(samples){
 function enrollmentFaceIsInsideOval(d){
  const video=$("enrollCamera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
  const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
- const rx=.23,ry=.40;
+ const rx=.31,ry=.44;
  const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
  const faceHeight=box.height/h,faceWidth=box.width/w;
- return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
+ return ellipse<=1&&faceHeight>=.16&&faceHeight<=.86&&faceWidth>=.10&&faceWidth<=.78;
 }
 async function captureEnrollmentSample(id){
  const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
@@ -268,7 +268,20 @@ async function runAutoEnrollment(){
    state.faces[id]=enrollmentSamples;
    localStorage.setItem(KEY,JSON.stringify(state));
    try{
-     await syncAdminNow();
+     // Persist the completed enrollment immediately to Firebase. Retry briefly
+     // so a momentary network hiccup does not turn a successful capture into
+     // a false “save failed” message.
+     let saved=false,lastError=null;
+     for(let attempt=1;attempt<=3&&!saved;attempt++){
+       try{
+         await syncAdminNow();
+         saved=true;
+       }catch(err){
+         lastError=err;
+         if(attempt<3) await new Promise(r=>setTimeout(r,700*attempt));
+       }
+     }
+     if(!saved) throw lastError||new Error('Firebase did not confirm the face enrollment save.');
      const employee=state.employees.find(e=>e.id===id);
      $("enrollStatus").textContent="✓ Employee enrolled successfully.";
      $("enrollResult").innerHTML=`<div class="enrolled-success"><div class="enrolled-check">✓</div><strong>EMPLOYEE ENROLLED</strong><span>${employee?.name||''}</span><small>${id} • Face saved to Firebase</small></div>`;

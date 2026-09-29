@@ -17,3 +17,10 @@ Preserved:
 - Existing Firebase Admin Login credentials/config.
 - Existing dashboard, DTR, sales, payroll, reports, attendance and face-recognition logic.
 - Existing Employee ID generation behavior.
+
+V8 — Automatic Face Save + Mobile Enrollment Oval
+- Kept Firebase central sync and Admin login unchanged.
+- Made completed face enrollment save retry up to 3 times before reporting failure.
+- Expanded face-inside-oval detection tolerance for easier mobile positioning.
+- Enlarged the enrollment oval on desktop and mobile for better face fit.
+- Preserved all existing employee/DTR/sales/payroll functionality.
