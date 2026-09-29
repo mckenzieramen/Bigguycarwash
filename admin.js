@@ -8,15 +8,27 @@ state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
-const save=()=>{
+const save=async()=>{
  localStorage.setItem(KEY,JSON.stringify(state));
- if(window.BIGGUYS_CLOUD?.ready) return window.BIGGUYS_CLOUD.push(state).catch(console.warn);
- return Promise.resolve();
+ if(!window.BigGuysCloud?.configured) return state;
+ try{
+   await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); },'admin');
+   if(window.BigGuysCloud?.ready){
+     const merged=await window.BigGuysCloud.push(state);
+     if(merged){state=merged;localStorage.setItem(KEY,JSON.stringify(state));}
+   }
+   return state;
+ }catch(err){
+   console.error('Central Firebase save failed:',err);
+   throw err;
+ }
 };
 async function syncAdminNow(){
- if(!window.BigGuysCloud?.configured) return;
- await window.BigGuysCloud.init(state,null,'admin');
- await window.BigGuysCloud.push(state);
+ if(!window.BigGuysCloud?.configured) return state;
+ await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); },'admin');
+ const merged=await window.BigGuysCloud.push(state);
+ if(merged){state=merged;localStorage.setItem(KEY,JSON.stringify(state));}
+ return state;
 }
 function syncStateFromStorage(){
  try{const raw=JSON.parse(localStorage.getItem(KEY)||"{}");if(!raw||typeof raw!=="object")return;state.employees=Array.isArray(raw.employees)?raw.employees:[];state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];state.sales=Array.isArray(raw.sales)?raw.sales:[];state.faces=raw.faces&&typeof raw.faces==="object"?raw.faces:{};state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{}}catch(e){console.warn("Could not sync dashboard data",e)}
@@ -205,7 +217,7 @@ $("employeeForm").onsubmit=async e=>{
    if(btn){btn.disabled=false;btn.textContent='ADD EMPLOYEE & ENROLL FACE';}
  }
 };
-$("salesForm").onsubmit=e=>{e.preventDefault();state.sales.push({date:today(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value});save();e.target.reset();refresh()};
+$("salesForm").onsubmit=async e=>{e.preventDefault();state.sales.push({id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value});try{await save();e.target.reset();refresh()}catch(err){alert('Sale was saved locally but Firebase did not confirm the cloud save. Please keep this device online and try again.')}};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 let enrollmentRunning=false,enrollmentSamples=[];
 function normalizeFaceRecords(value){
@@ -223,10 +235,10 @@ function averageDescriptor(samples){
 function enrollmentFaceIsInsideOval(d){
  const video=$("enrollCamera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
  const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
- const rx=.31,ry=.44;
+ const rx=.23,ry=.40;
  const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
  const faceHeight=box.height/h,faceWidth=box.width/w;
- return ellipse<=1&&faceHeight>=.16&&faceHeight<=.86&&faceWidth>=.10&&faceWidth<=.78;
+ return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
 }
 async function captureEnrollmentSample(id){
  const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
@@ -268,20 +280,7 @@ async function runAutoEnrollment(){
    state.faces[id]=enrollmentSamples;
    localStorage.setItem(KEY,JSON.stringify(state));
    try{
-     // Persist the completed enrollment immediately to Firebase. Retry briefly
-     // so a momentary network hiccup does not turn a successful capture into
-     // a false “save failed” message.
-     let saved=false,lastError=null;
-     for(let attempt=1;attempt<=3&&!saved;attempt++){
-       try{
-         await syncAdminNow();
-         saved=true;
-       }catch(err){
-         lastError=err;
-         if(attempt<3) await new Promise(r=>setTimeout(r,700*attempt));
-       }
-     }
-     if(!saved) throw lastError||new Error('Firebase did not confirm the face enrollment save.');
+     await syncAdminNow();
      const employee=state.employees.find(e=>e.id===id);
      $("enrollStatus").textContent="✓ Employee enrolled successfully.";
      $("enrollResult").innerHTML=`<div class="enrolled-success"><div class="enrolled-check">✓</div><strong>EMPLOYEE ENROLLED</strong><span>${employee?.name||''}</span><small>${id} • Face saved to Firebase</small></div>`;
@@ -453,8 +452,7 @@ document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener
 document.querySelectorAll("[data-report-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("reports");makeReport(btn.dataset.reportMode)}));
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; localStorage.setItem(KEY,JSON.stringify(state)); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
-setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000); // Admin page waits for explicit email/password login before initializing Firebase. Anonymous
-// initialization here could create a separate session and interfere with cross-device sync.
+setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){syncStateFromStorage();refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));
 

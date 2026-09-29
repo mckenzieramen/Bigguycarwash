@@ -130,7 +130,7 @@ function record(type){
    return;
   }
   const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
-  attendance={date,employeeId:employee.id,clockIn:now,clockOut:null,status};
+  attendance={id:(crypto.randomUUID?crypto.randomUUID():`att_${Date.now()}_${Math.random().toString(36).slice(2)}`),date,employeeId:employee.id,clockIn:now,clockOut:null,status};
   state.attendance.push(attendance);save();
   const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
   $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;

@@ -1,9 +1,11 @@
-/* Big Guy's Carwash — Firebase central data bridge.
-   Firestore is the central source of truth. localStorage is only an offline cache. */
+/* Big Guy's Carwash — Firebase central data bridge (SAFE CENTRAL SYNC).
+   Firestore is the central source of truth. localStorage is only an offline cache.
+   IMPORTANT: local + cloud data are MERGED by stable keys before every write so
+   opening another device can never blank an existing cloud record. */
 (function(){
   const cfg=window.BIGGUYS_FIREBASE_CONFIG||{};
   const configured=!!(cfg.apiKey&&cfg.authDomain&&cfg.projectId&&cfg.appId);
-  let db=null,auth=null,readyPromise=null,unsubscribers=[];
+  let db=null,auth=null,readyPromise=null,unsubscribers=[],syncBusy=false;
 
   const clean=s=>({
     employees:Array.isArray(s?.employees)?s.employees:[],
@@ -13,10 +15,43 @@
     dailyReports:s?.dailyReports&&typeof s.dailyReports==='object'?s.dailyReports:{},
     lastFaceCapture:s?.lastFaceCapture||null
   });
+
   const isAdmin=()=>!!(auth?.currentUser&&!auth.currentUser.isAnonymous);
+  const keyOf=(v,fields,fallback)=>{
+    const parts=fields.map(k=>v?.[k]??'');
+    const key=parts.join('|');
+    return key==='|'||parts.every(x=>x==='')?fallback:key;
+  };
+  const mergeArray=(local=[],cloud=[],keyFn)=>{
+    const out=[]; const seen=new Set();
+    for(const item of [...cloud,...local]){
+      const key=keyFn(item);
+      if(seen.has(key)){
+        // Prefer the local/newer representation when the same record exists.
+        const idx=out.findIndex(x=>keyFn(x)===key);
+        if(idx>=0)out[idx]=item;
+      }else{seen.add(key);out.push(item);}
+    }
+    return out;
+  };
+  const mergeObject=(local={},cloud={})=>Object.assign({},cloud||{},local||{});
+  const mergeState=(local,cloud)=>{
+    const l=clean(local),c=clean(cloud);
+    return {
+      employees:mergeArray(l.employees,c.employees,e=>String(e?.id||e?.uid||e?.name||JSON.stringify(e))),
+      attendance:mergeArray(l.attendance,c.attendance,e=>String(e?.id||keyOf(e,['employeeId','date','clockIn','clockOut'],JSON.stringify(e)))),
+      sales:mergeArray(l.sales,c.sales,e=>String(e?.id||keyOf(e,['date','time','employeeId','amount','note'],JSON.stringify(e)))),
+      faces:mergeObject(l.faces,c.faces),
+      dailyReports:mergeObject(l.dailyReports,c.dailyReports),
+      // Keep the most recent capture when both devices have one.
+      lastFaceCapture:(new Date(l.lastFaceCapture?.capturedAt||0)>=new Date(c.lastFaceCapture?.capturedAt||0)?l.lastFaceCapture:c.lastFaceCapture)||null
+    };
+  };
+
   function status(extra){
     window.BIGGUYS_CLOUD=Object.assign({configured,ready:!!db,status:db?'connected':'waiting'},extra||{});
   }
+
   async function ensureAuth(mode){
     if(!auth)auth=firebase.auth();
     if(auth.currentUser)return auth.currentUser;
@@ -24,77 +59,97 @@
     const cred=await auth.signInAnonymously();
     return cred.user;
   }
+
+  async function readCloudDocs(){
+    if(!db)throw new Error('Firebase Firestore is not initialized.');
+    const publicRef=db.doc('bigguys/public');
+    const attendanceRef=db.doc('bigguys/attendance');
+    const businessRef=db.doc('bigguys/business');
+    const [ps,as,bs]=await Promise.all([
+      publicRef.get(),attendanceRef.get(),isAdmin()?businessRef.get():Promise.resolve(null)
+    ]);
+    return {
+      public:ps.exists?(ps.data()||{}):{},
+      attendance:as.exists?(as.data()||{}):{},
+      business:bs?.exists?(bs.data()||{}):{}
+    };
+  }
+
+  async function readState(local){
+    const s=clean(local);
+    const docs=await readCloudDocs();
+    const cloud={
+      employees:Array.isArray(docs.public.employees)?docs.public.employees:[],
+      faces:docs.public.faces&&typeof docs.public.faces==='object'?docs.public.faces:{},
+      attendance:Array.isArray(docs.attendance.attendance)?docs.attendance.attendance:[],
+      lastFaceCapture:docs.attendance.lastFaceCapture||null,
+      sales:Array.isArray(docs.business.sales)?docs.business.sales:[],
+      dailyReports:docs.business.dailyReports&&typeof docs.business.dailyReports==='object'?docs.business.dailyReports:{}
+    };
+    return mergeState(s,cloud);
+  }
+
   async function pushState(state){
     if(!db)throw new Error('Firebase Firestore is not initialized.');
-    const s=clean(state);
-    const publicRef=db.doc('bigguys/public');
-    const attendanceRef=db.doc('bigguys/attendance');
-    const businessRef=db.doc('bigguys/business');
-    if(isAdmin()){
-      await Promise.all([
-        publicRef.set({employees:s.employees,faces:s.faces,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
-        attendanceRef.set({attendance:s.attendance,lastFaceCapture:s.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}),
-        businessRef.set({sales:s.sales,dailyReports:s.dailyReports,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
-      ]);
-    }else{
-      await attendanceRef.set({attendance:s.attendance,lastFaceCapture:s.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    if(syncBusy){
+      // Let the current write finish; the caller will retry through the queue.
+      await new Promise(r=>setTimeout(r,150));
+      if(syncBusy)throw new Error('Another Firebase save is still in progress. Please try again.');
     }
-    status({configured:true,ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
-    return true;
+    syncBusy=true;
+    try{
+      const current=clean(state);
+      const docs=await readCloudDocs();
+      const cloud={
+        employees:Array.isArray(docs.public.employees)?docs.public.employees:[],
+        faces:docs.public.faces&&typeof docs.public.faces==='object'?docs.public.faces:{},
+        attendance:Array.isArray(docs.attendance.attendance)?docs.attendance.attendance:[],
+        lastFaceCapture:docs.attendance.lastFaceCapture||null,
+        sales:Array.isArray(docs.business.sales)?docs.business.sales:[],
+        dailyReports:docs.business.dailyReports&&typeof docs.business.dailyReports==='object'?docs.business.dailyReports:{}
+      };
+      const merged=mergeState(current,cloud);
+      const stamp=firebase.firestore.FieldValue.serverTimestamp();
+      if(isAdmin()){
+        await Promise.all([
+          db.doc('bigguys/public').set({employees:merged.employees,faces:merged.faces,updatedAt:stamp},{merge:true}),
+          db.doc('bigguys/attendance').set({attendance:merged.attendance,lastFaceCapture:merged.lastFaceCapture,updatedAt:stamp},{merge:true}),
+          db.doc('bigguys/business').set({sales:merged.sales,dailyReports:merged.dailyReports,updatedAt:stamp},{merge:true})
+        ]);
+      }else{
+        // Employee DTR devices use anonymous Firebase auth and may only write attendance.
+        await db.doc('bigguys/attendance').set({attendance:merged.attendance,lastFaceCapture:merged.lastFaceCapture,updatedAt:stamp},{merge:true});
+      }
+      status({configured:true,ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
+      return merged;
+    }catch(err){
+      status({configured:true,ready:true,status:'error',lastSyncError:err,error:err});
+      throw err;
+    }finally{syncBusy=false;}
   }
-  const hasData=s=>!!(s&&(s.employees?.length||s.attendance?.length||s.sales?.length||Object.keys(s.faces||{}).length||Object.keys(s.dailyReports||{}).length||s.lastFaceCapture));
-  const uniqBy=(arr,keyFn)=>{const m=new Map();(Array.isArray(arr)?arr:[]).forEach(x=>m.set(keyFn(x),x));return [...m.values()];};
-  function mergeStates(local,cloud){
-    const l=clean(local), c=clean(cloud);
-    return {
-      employees:uniqBy([...c.employees,...l.employees],x=>String(x?.id||JSON.stringify(x))),
-      faces:Object.assign({},l.faces,c.faces),
-      attendance:uniqBy([...c.attendance,...l.attendance],x=>String(x?.employeeId||'')+'|'+String(x?.date||'')+'|'+String(x?.type||'')+'|'+String(x?.timestamp||x?.time||'')),
-      sales:uniqBy([...c.sales,...l.sales],x=>String(x?.id||'')+'|'+String(x?.employeeId||'')+'|'+String(x?.date||'')+'|'+String(x?.amount||'')+'|'+String(x?.note||'')),
-      dailyReports:Object.assign({},l.dailyReports,c.dailyReports),
-      lastFaceCapture:c.lastFaceCapture||l.lastFaceCapture||null
-    };
-  }
-  async function readState(local,mode){
-    const s=clean(local);
-    const publicRef=db.doc('bigguys/public');
-    const attendanceRef=db.doc('bigguys/attendance');
-    const businessRef=db.doc('bigguys/business');
-    const [ps,as,bs]=await Promise.all([publicRef.get(),attendanceRef.get(),isAdmin()?businessRef.get():Promise.resolve(null)]);
-    const pd=ps.exists?(ps.data()||{}):{};
-    const ad=as.exists?(as.data()||{}):{};
-    const bd=bs?.exists?(bs.data()||{}):{};
-    const cloud={
-      employees:Array.isArray(pd.employees)?pd.employees:[],
-      faces:pd.faces&&typeof pd.faces==='object'?pd.faces:{},
-      attendance:Array.isArray(ad.attendance)?ad.attendance:[],
-      lastFaceCapture:Object.prototype.hasOwnProperty.call(ad,'lastFaceCapture')?ad.lastFaceCapture:null,
-      sales:Array.isArray(bd.sales)?bd.sales:[],
-      dailyReports:bd.dailyReports&&typeof bd.dailyReports==='object'?bd.dailyReports:{}
-    };
-    // Cloud is authoritative when populated, but any local records that are not
-    // already in the cloud are merged so an existing computer can migrate its
-    // data instead of being silently cleared.
-    return (ps.exists||as.exists||bs?.exists) ? mergeStates(s,cloud) : s;
-  }
+
   function startListeners(onRemote){
-    const publicRef=db.doc('bigguys/public');
-    const attendanceRef=db.doc('bigguys/attendance');
-    const businessRef=db.doc('bigguys/business');
+    const refs=[db.doc('bigguys/public'),db.doc('bigguys/attendance')];
+    if(isAdmin())refs.push(db.doc('bigguys/business'));
     const apply=async()=>{
       try{
-        const next=await readState({},isAdmin()?'admin':'dtr');
+        // Merge incoming cloud data with the current local cache instead of replacing it.
+        const local=window.__BIGGUYS_CURRENT_STATE||{};
+        const next=await readState(local);
+        window.__BIGGUYS_CURRENT_STATE=next;
         if(onRemote)onRemote(next);
         status({configured:true,ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
       }catch(err){
         console.warn('Firebase realtime read failed:',err);
-        status({configured:true,ready:true,status:'error',lastSyncError:err});
+        status({configured:true,ready:true,status:'error',lastSyncError:err,error:err});
       }
     };
-    unsubscribers.push(publicRef.onSnapshot(apply,e=>console.warn('Public listener:',e)));
-    unsubscribers.push(attendanceRef.onSnapshot(apply,e=>console.warn('Attendance listener:',e)));
-    if(isAdmin())unsubscribers.push(businessRef.onSnapshot(apply,e=>console.warn('Business listener:',e)));
+    refs.forEach(ref=>unsubscribers.push(ref.onSnapshot(apply,e=>{
+      console.warn('Firebase listener:',e);
+      status({configured:true,ready:true,status:'error',lastSyncError:e,error:e});
+    })));
   }
+
   async function init(initial,onRemote,mode='dtr'){
     if(!configured){status({ready:false,status:'not-configured',push:async()=>false});return false;}
     if(readyPromise)return readyPromise;
@@ -105,19 +160,16 @@
         db=firebase.firestore();
         auth=firebase.auth();
         await ensureAuth(mode);
-        const merged=await readState(initial,mode);
+        const merged=await readState(initial||{});
+        window.__BIGGUYS_CURRENT_STATE=merged;
         if(onRemote)onRemote(merged);
 
-        // Admin is allowed to seed/migrate the existing browser cache into Firebase.
-        // This also creates the three Firestore documents even when the app is empty.
         if(isAdmin()){
-          await pushState(merged);
+          // Always merge then save. This is the migration path for existing browser data.
+          const saved=await pushState(merged);
+          window.__BIGGUYS_CURRENT_STATE=saved;
+          if(onRemote)onRemote(saved);
         }else{
-          const hasAttendance=merged.attendance.length||merged.lastFaceCapture;
-          const attendanceSnap=await db.doc('bigguys/attendance').get();
-          if(!attendanceSnap.exists&&hasAttendance){
-            await db.doc('bigguys/attendance').set({attendance:merged.attendance,lastFaceCapture:merged.lastFaceCapture,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-          }
           status({configured:true,ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});
         }
         startListeners(onRemote);
@@ -130,6 +182,7 @@
     })();
     return readyPromise;
   }
+
   async function getAdminProfile(user){
     if(!db)throw new Error('Firebase Firestore is not initialized.');
     const u=user||auth?.currentUser;
@@ -137,29 +190,34 @@
     const snap=await db.doc(`admins/${u.uid}`).get();
     if(!snap.exists)throw new Error('Admin profile not found in Firestore.');
     const profile=snap.data()||{};
-    if(profile.role!=='admin' || profile.active!==true)throw new Error('This Firebase account is not an active administrator.');
+    if(profile.role!=='admin'||profile.active!==true)throw new Error('This Firebase account is not an active administrator.');
     return {uid:u.uid,...profile};
   }
+
   async function adminLogin(email,password){
     if(!configured)throw new Error('Firebase configuration is missing.');
     if(!window.firebase)throw new Error('Firebase SDK did not load.');
     if(!firebase.apps.length)firebase.initializeApp(cfg);
-    if(!firebase.apps.length)firebase.initializeApp(cfg);
     auth=auth||firebase.auth();
+    // Firestore must be initialized before checking the admin profile.
     db=db||firebase.firestore();
     const user=(await auth.signInWithEmailAndPassword(email,password)).user;
     if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');
     await getAdminProfile(user);
     readyPromise=null;
     unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];
+    window.__BIGGUYS_CURRENT_STATE=null;
     status({configured:true,ready:false,status:'authenticated',userEmail:user.email});
     return user;
   }
+
   async function adminLogout(){
     if(auth)await auth.signOut();
-    readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];
+    readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;
+    unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];
     status({configured,ready:false,status:'signed-out',push:async()=>false});
   }
+
   window.BigGuysCloud={
     init,adminLogin,adminLogout,getAdminProfile,configured,isAdmin,ensureAuth,
     push:async state=>pushState(state),

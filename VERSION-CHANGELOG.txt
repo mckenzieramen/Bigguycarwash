@@ -1,34 +1,10 @@
-BIG GUY'S CARWASH — v7 SAFE EDIT
+Big Guy's Carwash — V11 Central Sync Protection
 
-Requested changes:
-- Employee creation now uses First Name + Last Name.
-- Employee ID remains automatic and read-only/gray-out.
-- Employee ID format remains YYYYMM + monthly hiring sequence.
-- Date Started drives the Employee ID prefix.
-- Employment Type remains Full Time / Semi Full Time / Part Time.
-- Add Employee now immediately opens the automatic Face Enrollment step.
-- Face camera starts automatically; no manual START CAMERA / ENROLL FACE step is required.
-- Successful capture shows EMPLOYEE ENROLLED and saves the face data to Firebase.
-- Employee data is explicitly synchronized to Firebase before the enrollment step.
-- Added FACE action for re-enrolling an existing employee.
-- Improved mobile responsive layout, camera sizing, modal sizing, and input font sizing to avoid mobile zoom.
-
-Preserved:
-- Existing Firebase Admin Login credentials/config.
-- Existing dashboard, DTR, sales, payroll, reports, attendance and face-recognition logic.
-- Existing Employee ID generation behavior.
-
-V8 — Automatic Face Save + Mobile Enrollment Oval
-- Kept Firebase central sync and Admin login unchanged.
-- Made completed face enrollment save retry up to 3 times before reporting failure.
-- Expanded face-inside-oval detection tolerance for easier mobile positioning.
-- Enlarged the enrollment oval on desktop and mobile for better face fit.
-- Preserved all existing employee/DTR/sales/payroll functionality.
-
-V9 — Central data synchronization fix
-- Admin page no longer initializes Firebase anonymously before admin login.
-- Cloud/local records are merged instead of allowing an empty device cache to overwrite cloud data.
-- Existing computer data can be migrated into the central Firestore documents when those documents are empty.
-- Employee, face, attendance, sales, and report data are preserved across devices.
-
-V10 — Fixed Admin login Firestore initialization: db is initialized before admin profile validation, preserving central Firestore sync.
+- Firestore central data is now merged with local cache before every admin write.
+- Existing employees, attendance, sales, faces, and daily reports are protected from being overwritten by an empty/stale device.
+- Admin listeners merge remote data instead of replacing the current device state with a stale snapshot.
+- Admin save operations update the local state with the confirmed merged Firestore state.
+- New sales and attendance records receive stable IDs for safer cross-device merging.
+- Employee DTR anonymous devices continue to write only attendance data.
+- Face enrollment saves through the same protected central admin sync path.
+- No Firebase credentials or Firestore rules were changed.
