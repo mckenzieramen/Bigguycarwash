@@ -27,3 +27,10 @@ V28 — Face Enrollment Realtime Race Fix
 - Fixed concurrent Firestore realtime listeners from overwriting a freshly confirmed face enrollment with stale state.
 - After Firebase confirms the 5 face samples, the enrolled samples are immediately retained in the current UI state before refresh.
 - No other feature or data structure changed.
+
+V29 — Face Enrollment Persistence Fix (2026-09-29)
+- Based exactly on V28.
+- ROOT-CAUSE FIX: refresh() was loading the localStorage cache, whose face map is intentionally empty, and replacing the live Firebase face map with {}.
+- Local cache sync now never clears an already-loaded Firebase face map with the empty cache placeholder.
+- Firebase remains the source of truth for enrolled face descriptors.
+- No changes to face samples, recognition threshold, employee IDs, navigation, deletion, payroll, sales, or database structure.

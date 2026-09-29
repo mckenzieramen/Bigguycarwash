@@ -35,7 +35,19 @@ async function syncAdminNow(){
  return state;
 }
 function syncStateFromStorage(){
- try{const raw=JSON.parse(localStorage.getItem(KEY)||"{}");if(!raw||typeof raw!=="object")return;state.employees=Array.isArray(raw.employees)?raw.employees:[];state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];state.sales=Array.isArray(raw.sales)?raw.sales:[];if(raw.faces&&typeof raw.faces==="object")state.faces=raw.faces;if(raw.faceUpdatedAt&&typeof raw.faceUpdatedAt==="object")state.faceUpdatedAt=raw.faceUpdatedAt;state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{}}catch(e){console.warn("Could not sync dashboard data",e)}
+ try{
+   const raw=JSON.parse(localStorage.getItem(KEY)||"{}");
+   if(!raw||typeof raw!=="object")return;
+   state.employees=Array.isArray(raw.employees)?raw.employees:[];
+   state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];
+   state.sales=Array.isArray(raw.sales)?raw.sales:[];
+   // Face descriptors are intentionally NOT stored in localStorage. Firebase is
+   // the source of truth for faces, so never replace a live Firebase face map
+   // with the empty cache placeholder written by cacheState().
+   if(raw.faces&&typeof raw.faces==="object"&&Object.keys(raw.faces).length)state.faces=raw.faces;
+   if(raw.faceUpdatedAt&&typeof raw.faceUpdatedAt==="object"&&Object.keys(raw.faceUpdatedAt).length)state.faceUpdatedAt=raw.faceUpdatedAt;
+   state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{};
+ }catch(e){console.warn("Could not sync dashboard data",e)}
 }
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
