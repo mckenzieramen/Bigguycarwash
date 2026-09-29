@@ -91,11 +91,8 @@
 
   async function pushState(state){
     if(!db)throw new Error('Firebase Firestore is not initialized.');
-    if(syncBusy){
-      // Let the current write finish; the caller will retry through the queue.
-      await new Promise(r=>setTimeout(r,150));
-      if(syncBusy)throw new Error('Another Firebase save is still in progress. Please try again.');
-    }
+    // Serialize writes instead of failing when an enrollment/save overlaps a realtime sync.
+    while(syncBusy) await new Promise(r=>setTimeout(r,120));
     syncBusy=true;
     try{
       const current=clean(state);

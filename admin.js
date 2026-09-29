@@ -280,18 +280,40 @@ async function runAutoEnrollment(){
    state.faces[id]=enrollmentSamples;
    localStorage.setItem(KEY,JSON.stringify(state));
    try{
-     await syncAdminNow();
+     // Automatic cloud save with verification. A short transient Firestore delay
+     // must not make the employee repeat the face scan.
+     let lastErr=null, confirmed=false;
+     for(let attempt=1;attempt<=5&&!confirmed;attempt++){
+       try{
+         await syncAdminNow();
+         confirmed=Array.isArray(state.faces?.[id]) && state.faces[id].length>=5;
+         if(!confirmed) throw new Error('Firebase returned without confirming the enrolled face.');
+       }catch(err){
+         lastErr=err;
+         if(attempt<5) await new Promise(r=>setTimeout(r,500*attempt));
+       }
+     }
+     if(!confirmed) throw lastErr||new Error('Firebase did not confirm the face enrollment.');
      const employee=state.employees.find(e=>e.id===id);
      $("enrollStatus").textContent="✓ Employee enrolled successfully.";
      $("enrollResult").innerHTML=`<div class="enrolled-success"><div class="enrolled-check">✓</div><strong>EMPLOYEE ENROLLED</strong><span>${employee?.name||''}</span><small>${id} • Face saved to Firebase</small></div>`;
      refresh();
-     setTimeout(closeEnrollmentModal,1400);
+     // Automatically return to a fresh Add Employee form for the next hire.
+     setTimeout(()=>{
+       closeEnrollmentModal();
+       const nav=document.querySelector('.side-nav[data-tab="employees"]');
+       if(nav)nav.click();
+       const form=$("employeeForm");
+       if(form){form.reset();$("empStart").value='08:00';$("empHireDate").value=today();updateEmployeeIdPreview();}
+       $("empFirstName")?.focus();
+     },1400);
      enrollmentRunning=false;
      return true;
    }catch(err){
      console.error('Face enrollment cloud save failed:',err);
-     $("enrollStatus").textContent="Face captured, but cloud save failed. Please try again.";
-     $("enrollResult").innerHTML='<div class="result late-result">The face was captured, but Firebase did not confirm the save. Please try again.</div>';
+     const detail=err?.code||err?.message||'Unknown Firebase error';
+     $("enrollStatus").textContent="Cloud save could not be confirmed.";
+     $("enrollResult").innerHTML=`<div class="result late-result">Face captured, but Firebase did not confirm the save.<br><small>${detail}</small></div>`;
    }
  }else{
    $("enrollStatus").textContent="Enrollment failed — not enough clear face samples were captured.";
