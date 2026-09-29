@@ -125,8 +125,8 @@
     <div class="enrollment-identity"><div><span>Employee ID</span><strong id="enrollmentEmployeeId">—</strong></div><div><span>Employee</span><strong id="enrollmentEmployeeName">—</strong></div></div>
     <select id="enrollEmployee" class="hidden" aria-hidden="true"></select>
     <div class="camera-box admin-camera enrollment-modal-camera"><video id="enrollCamera" autoplay muted playsinline></video><div id="enrollOvalFrame" class="face-frame enrollment-oval oval-red"></div><div id="enrollStatus" class="camera-status">Starting face scan…</div></div>
-    <button id="startEnrollCamera" type="button" class="hidden">START CAMERA</button><button id="enrollFace" type="button" class="hidden" disabled>ENROLL FACE</button>
-    <div id="enrollResult"></div>
+    <button id="startEnrollCamera" type="button" class="hidden">START CAMERA</button><button id="enrollFace" type="button" class="hidden" disabled>ENROLL FACE</button><button id="retryEnrollment" type="button" class="hidden">↻ RETRY FACE SCAN</button>
+    <div class="enrollment-steps" aria-label="Face enrollment steps"><span>1 Normal</span><span>2 Left</span><span>3 Right</span><span>4 Up/Down</span><span>5 Normal</span></div><div id="enrollResult"></div>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>

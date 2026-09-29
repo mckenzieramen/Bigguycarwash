@@ -6,3 +6,5 @@ V20 — scalable central storage fix
 - Local browser cache no longer stores face descriptors or base64 attendance snapshots, preventing browser storage quota errors.
 - Added Firestore rules for the scalable collections.
 - Preserved existing Firebase Auth, DTR, payroll, sales, dashboard, and face recognition flows.
+
+V23 - Atomic employee ID sequence: central Firestore transaction reserves YYYYMM sequence, preventing duplicate IDs across devices and continuing sequence after deletions.

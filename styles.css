@@ -92,3 +92,4 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
  .enrolled-success{padding:18px 12px}
  #employeeTable{margin-left:-4px;margin-right:-4px;border-radius:10px}
 }
+.enrollment-steps{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:10px 0 4px}.enrollment-steps span{font-size:11px;padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);color:#b8c2d1}.enrollment-progress{line-height:1.45}

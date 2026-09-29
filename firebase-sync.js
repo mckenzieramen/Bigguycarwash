@@ -78,6 +78,26 @@
     if(s.lastFaceCapture)await db.doc('bigguys_meta/attendance').set({lastFaceCapture:s.lastFaceCapture,updatedAt:stamp},{merge:true});
   }
   async function pushState(local){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');await writeStateRecords(clean(local));const fresh=await readCloud();status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return fresh;}
+  async function reserveEmployeeId(hireDate){
+    await initFirebase();
+    if(!isAdmin())throw new Error('Admin authentication required.');
+    const m=/^(\d{4})-(\d{2})-\d{2}$/.exec(hireDate||'');
+    if(!m)throw new Error('invalid-argument: valid hire date is required.');
+    const prefix=m[1]+m[2];
+    const seqRef=db.doc('bigguys_meta/employee_sequences');
+    const employees=await getAll(C.employees);
+    let cloudMax=0;
+    employees.forEach(e=>{const id=String(e?.id||'');if(id.startsWith(prefix)){const n=Number(id.slice(prefix.length));if(Number.isFinite(n)&&n>cloudMax)cloudMax=n;}});
+    const reserved=await db.runTransaction(async tx=>{
+      const snap=await tx.get(seqRef);
+      const data=snap.exists?(snap.data()||{}):{};
+      const stored=Number(data[prefix]||0);
+      const next=Math.max(stored,cloudMax)+1;
+      tx.set(seqRef,{[prefix]:next,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      return next;
+    });
+    return prefix+String(reserved).padStart(2,'0');
+  }
   async function saveEmployee(employee){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!employee?.id)throw new Error('invalid-argument: employee ID is missing.');await db.doc(`${C.employees}/${employee.id}`).set({...employee,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   function serializeFaceSamples(samples){if(!Array.isArray(samples)||samples.length<5)throw new Error('invalid-argument: at least 5 face samples are required.');return samples.map((sample,i)=>{const a=Array.from(sample||[]);if(a.length!==128)throw new Error(`invalid-argument: face sample ${i+1} must contain 128 values.`);return a.map((n,j)=>{const v=Number(n);if(!Number.isFinite(v))throw new Error(`invalid-argument: face sample ${i+1}, value ${j+1} is not a finite number.`);return v;});});}
   async function saveFaceEnrollment(employeeId,samples){
@@ -106,5 +126,5 @@
   async function adminLogin(email,password){await initFirebase();const user=(await auth.signInWithEmailAndPassword(email,password)).user;if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');await getAdminProfile(user);readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];return user;}
   async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;}
   async function getAdminProfilePublic(){return getAdminProfile();}
-  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,saveEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
+  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
 })();

@@ -222,7 +222,7 @@ $("employeeForm").onsubmit=async e=>{
      cacheState();
    },'admin');
    const hireDate=$("empHireDate").value||today();
-   const id=nextEmployeeId(hireDate);
+   const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
    const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate};
    state.employees.push(employee);
    cacheState();
@@ -248,6 +248,14 @@ $("employeeForm").onsubmit=async e=>{
 $("salesForm").onsubmit=async e=>{e.preventDefault();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:new Date().toTimeString().slice(0,5),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value};state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}cacheState();e.target.reset();refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
 let enrollmentRunning=false,enrollmentSamples=[];
+const ENROLL_STEPS=[
+  {name:"Normal face",instruction:"Look straight at the camera with your face centered."},
+  {name:"Slight left",instruction:"Turn your face slightly to the LEFT."},
+  {name:"Slight right",instruction:"Turn your face slightly to the RIGHT."},
+  {name:"Slight up/down",instruction:"Tilt your face slightly UP, then slightly DOWN."},
+  {name:"Normal expression",instruction:"Return to center with a natural, relaxed expression."}
+];
+let enrollmentStep=0;
 function normalizeFaceRecords(value){
  if(!value)return [];
  if(Array.isArray(value)&&value.length&&Array.isArray(value[0]))return value;
@@ -268,93 +276,98 @@ function enrollmentFaceIsInsideOval(d){
  const faceHeight=box.height/h,faceWidth=box.width/w;
  return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
 }
-async function captureEnrollmentSample(id){
+function facePoseForStep(d,step){
+ const pos=d?.landmarks?.positions||[];
+ if(pos.length<68)return true;
+ const nose=pos[30], leftEye=pos[36], rightEye=pos[45], chin=pos[8], brow=pos[27];
+ const eyeMidX=(leftEye.x+rightEye.x)/2, eyeDist=Math.max(1,Math.abs(rightEye.x-leftEye.x));
+ const yaw=(nose.x-eyeMidX)/eyeDist;
+ const faceVertical=Math.max(1,chin.y-brow.y);
+ const pitch=(nose.y-(brow.y+faceVertical*.45))/faceVertical;
+ if(step===0||step===4)return Math.abs(yaw)<.16;
+ if(step===1)return yaw<-.08;
+ if(step===2)return yaw>.08;
+ if(step===3)return Math.abs(yaw)<.22 && pitch<.20;
+ return true;
+}
+async function captureEnrollmentSample(id,step){
  const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
  if(!d)return false;
- const good=enrollmentFaceIsInsideOval(d);
+ const good=enrollmentFaceIsInsideOval(d) && facePoseForStep(d,step);
  const frame=$("enrollOvalFrame");
- frame?.classList.toggle("oval-green",good);
- frame?.classList.toggle("oval-red",!good);
+ frame?.classList.toggle("oval-green",good); frame?.classList.toggle("oval-red",!good);
  if(!good)return false;
- enrollmentSamples.push(Array.from(d.descriptor));
- $("enrollResult").innerHTML=`<div class="result success enrollment-progress">Capturing face samples: <strong>${enrollmentSamples.length}/8</strong><br><small>Keep your face centered inside the green oval.</small></div>`;
+ const descriptor=Array.from(d.descriptor);
+ if(descriptor.length!==128||descriptor.some(v=>!Number.isFinite(Number(v))))return false;
+ enrollmentSamples.push(descriptor);
+ const next=enrollmentSamples.length;
+ $("enrollResult").innerHTML=`<div class="result success enrollment-progress"><strong>${ENROLL_STEPS[step].name}</strong><br>Sample ${next}/5 captured ✓<br><small>${next<5?ENROLL_STEPS[next].instruction:"All 5 face samples captured. Saving to Firebase…"}</small></div>`;
  return true;
 }
 function stopEnrollmentCamera(){
  if(enrollStream){enrollStream.getTracks().forEach(t=>t.stop());enrollStream=null;}
  const v=$("enrollCamera");if(v)v.srcObject=null;
 }
+function setEnrollmentRetryVisible(show){const b=$("retryEnrollment");if(b)b.classList.toggle("hidden",!show);}
 function closeEnrollmentModal(){
  stopEnrollmentCamera();
  enrollmentRunning=false;
+ setEnrollmentRetryVisible(false);
  $("enrollmentModal")?.classList.add('hidden');
 }
 async function runAutoEnrollment(){
  const id=$("enrollEmployee").value;if(!id||enrollmentRunning)return false;
- enrollmentRunning=true;enrollmentSamples=[];
- $("enrollStatus").textContent="Automatic enrollment started — keep your face inside the green oval.";
- $("enrollResult").innerHTML='';
- let attempts=0;
- while(enrollmentSamples.length<8&&attempts<110&&enrollmentRunning){
-   attempts++;
-   try{
-     const ok=await captureEnrollmentSample(id);
-     if(!ok)$("enrollStatus").textContent="🔴 Keep your face fully inside the oval and look toward the camera.";
-     else $("enrollStatus").textContent=`🟢 Face aligned — captured ${enrollmentSamples.length}/8 samples.`;
-   }catch(err){console.warn('Enrollment detection error:',err);}
-   await new Promise(r=>setTimeout(r,350));
+ setEnrollmentRetryVisible(false);
+ enrollmentRunning=true;enrollmentSamples=[];enrollmentStep=0;
+ $("enrollStatus").textContent=`Step 1/5 — ${ENROLL_STEPS[0].instruction}`;
+ $("enrollResult").innerHTML=`<div class="result success enrollment-progress"><strong>${ENROLL_STEPS[0].name}</strong><br><small>${ENROLL_STEPS[0].instruction}</small></div>`;
+ for(enrollmentStep=0;enrollmentStep<ENROLL_STEPS.length&&enrollmentRunning;enrollmentStep++){
+   let captured=false, attempts=0;
+   $("enrollStatus").textContent=`Step ${enrollmentStep+1}/5 — ${ENROLL_STEPS[enrollmentStep].instruction}`;
+   while(!captured&&attempts<80&&enrollmentRunning){
+     attempts++;
+     try{captured=await captureEnrollmentSample(id,enrollmentStep);}catch(err){console.warn('Enrollment detection error:',err);}
+     if(!captured)$("enrollStatus").textContent=`🔴 Step ${enrollmentStep+1}/5 — ${ENROLL_STEPS[enrollmentStep].instruction}`;
+     else if(enrollmentStep<4)$("enrollStatus").textContent=`🟢 Step ${enrollmentStep+1}/5 captured — now: ${ENROLL_STEPS[enrollmentStep+1].instruction}`;
+     await new Promise(r=>setTimeout(r,350));
+   }
+   if(!captured){
+     $("enrollStatus").textContent="Enrollment paused — please reposition and try again.";
+     $("enrollResult").innerHTML='<div class="result late-result">Could not capture this required face position. Keep your face inside the oval and follow the instruction.</div>';
+     enrollmentRunning=false;
+    setEnrollmentRetryVisible(true);
+    return false;
+   }
+   await new Promise(r=>setTimeout(r,500));
  }
- if(enrollmentSamples.length>=5){
+ if(enrollmentSamples.length===5){
    state.faces[id]=enrollmentSamples;
-   state.faceUpdatedAt=state.faceUpdatedAt||{}; state.faceUpdatedAt[id]=new Date().toISOString();
-   cacheState();
+   state.faceUpdatedAt=state.faceUpdatedAt||{};state.faceUpdatedAt[id]=new Date().toISOString();cacheState();
    try{
-     // Automatic cloud save with verification. A short transient Firestore delay
-     // must not make the employee repeat the face scan.
-     let lastErr=null, confirmed=false;
+     let lastErr=null,confirmed=false;
      for(let attempt=1;attempt<=5&&!confirmed;attempt++){
        try{
-         if(window.BigGuysCloud?.saveFaceEnrollment){
-           state=await window.BigGuysCloud.saveFaceEnrollment(id,enrollmentSamples);
-           cacheState();
-         }else{
-           await syncAdminNow();
-         }
-         confirmed=Array.isArray(state.faces?.[id]) && state.faces[id].length>=5;
-         if(!confirmed) throw new Error('Firebase returned without confirming the enrolled face.');
-       }catch(err){
-         lastErr=err;
-         if(attempt<5) await new Promise(r=>setTimeout(r,500*attempt));
-       }
+         if(window.BigGuysCloud?.saveFaceEnrollment)state=await window.BigGuysCloud.saveFaceEnrollment(id,enrollmentSamples);else await syncAdminNow();
+         cacheState();
+         confirmed=Array.isArray(state.faces?.[id])&&state.faces[id].length>=5;
+         if(!confirmed)throw new Error('Firebase returned without confirming the enrolled face.');
+       }catch(err){lastErr=err;if(attempt<5)await new Promise(r=>setTimeout(r,500*attempt));}
      }
-     if(!confirmed) throw lastErr||new Error('Firebase did not confirm the face enrollment.');
+     if(!confirmed)throw lastErr||new Error('Firebase did not confirm the face enrollment.');
      const employee=state.employees.find(e=>e.id===id);
      $("enrollStatus").textContent="✓ Employee enrolled successfully.";
-     $("enrollResult").innerHTML=`<div class="enrolled-success"><div class="enrolled-check">✓</div><strong>EMPLOYEE ENROLLED</strong><span>${employee?.name||''}</span><small>${id} • Face saved to Firebase</small></div>`;
+     $("enrollResult").innerHTML=`<div class="enrolled-success"><div class="enrolled-check">✓</div><strong>EMPLOYEE ENROLLED</strong><span>${employee?.name||''}</span><small>${id} • 5 face samples saved to Firebase</small></div>`;
      refresh();
-     // Automatically return to a fresh Add Employee form for the next hire.
-     setTimeout(()=>{
-       closeEnrollmentModal();
-       const nav=document.querySelector('.side-nav[data-tab="employees"]');
-       if(nav)nav.click();
-       const form=$("employeeForm");
-       if(form){form.reset();$("empStart").value='08:00';$("empHireDate").value=today();updateEmployeeIdPreview();}
-       $("empFirstName")?.focus();
-     },1400);
-     enrollmentRunning=false;
-     return true;
+     setTimeout(()=>{closeEnrollmentModal();const nav=document.querySelector('.side-nav[data-tab="employees"]');if(nav)nav.click();const form=$("employeeForm");if(form){form.reset();$("empStart").value='08:00';$("empHireDate").value=today();updateEmployeeIdPreview();}$("empFirstName")?.focus();},1400);
+     enrollmentRunning=false;return true;
    }catch(err){
-     console.error('Face enrollment cloud save failed:',err);
-     const detail=[err?.code,err?.message].filter(Boolean).join(' — ')||'Unknown Firebase error';
+     console.error('Face enrollment cloud save failed:',err);const detail=[err?.code,err?.message].filter(Boolean).join(' — ')||'Unknown Firebase error';
      $("enrollStatus").textContent="Cloud save could not be confirmed.";
-     $("enrollResult").innerHTML=`<div class="result late-result">Face captured, but Firebase did not confirm the save.<br><small>${detail}</small></div>`;
+     $("enrollResult").innerHTML=`<div class="result late-result">Face samples captured, but Firebase did not confirm the save.<br><small>${detail}</small></div>`;
+     setEnrollmentRetryVisible(true);
    }
- }else{
-   $("enrollStatus").textContent="Enrollment failed — not enough clear face samples were captured.";
-   $("enrollResult").innerHTML='<div class="result late-result">Could not capture enough clear samples. Keep your face centered and try again.</div>';
- }
- enrollmentRunning=false;
- return false;
+ }else{$("enrollStatus").textContent="Enrollment failed — all 5 face samples are required.";$("enrollResult").innerHTML='<div class="result late-result">All 5 guided face samples are required.</div>';setEnrollmentRetryVisible(true)}
+ enrollmentRunning=false;return false;
 }
 async function startEnrollmentCamera(){
  if(!await loadModels())return false;
@@ -385,6 +398,7 @@ async function openEnrollmentModal(id){
  $("enrollmentEmployeeId").textContent=employee.id;
  $("enrollmentEmployeeLabel").textContent="Position your face inside the oval. Enrollment will start automatically.";
  $("enrollResult").innerHTML='';
+ setEnrollmentRetryVisible(false);
  $("enrollOvalFrame")?.classList.remove('oval-green');
  $("enrollOvalFrame")?.classList.add('oval-red');
  modal?.classList.remove('hidden');
@@ -393,6 +407,7 @@ async function openEnrollmentModal(id){
 }
 $("startEnrollCamera").onclick=startEnrollmentCamera;
 $("enrollFace").onclick=runAutoEnrollment;
+$("retryEnrollment").onclick=async()=>{setEnrollmentRetryVisible(false);if(!enrollStream){const ready=await startEnrollmentCamera();if(!ready){setEnrollmentRetryVisible(true);return;}}await runAutoEnrollment();};
 $("closeEnrollmentModal").onclick=closeEnrollmentModal;
 $("enrollmentModal")?.querySelector('.enrollment-modal-backdrop')?.addEventListener('click',()=>{if(!enrollmentRunning)closeEnrollmentModal();});
 
