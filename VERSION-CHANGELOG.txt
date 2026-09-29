@@ -42,3 +42,11 @@ V31 — DTR Face Recognition Cloud Sync Fix
 - DTR now refuses to start scanning if the cloud face records could not be loaded.
 - Face matching now uses Firebase face-record keys matched by normalized employee ID.
 - No changes to enrollment steps, employee IDs, delete, navigation, attendance, payroll, or other features.
+
+
+V32 — DTR Employee/Face ID Resolution Fix (2026-09-29)
+- Based exactly on V31.
+- Fixed the DTR cloud face-map resolution so a face document is matched using the candidate employeeId OR its Firestore document ID, but only when that ID actually exists in the employee collection.
+- Prevents stale/mismatched face metadata from causing an enrolled employee to be treated as unregistered.
+- Kept each employee's face samples isolated by exact employee ID.
+- No changes to enrollment samples, employee ID generation, delete, navigation, attendance, payroll, or sales.

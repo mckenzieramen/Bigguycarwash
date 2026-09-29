@@ -43,10 +43,17 @@ function faceIsInsideOval(d){
 }
 function bestEmployee(descriptor){
  let best=null,bestDistance=Infinity;
- const employeesById=new Map((state.employees||[]).map(e=>[String(e?.id),e]));
+ const employeesById=new Map();
+ (state.employees||[]).forEach(e=>{
+   const id=String(e?.id||e?.employeeId||'').trim();
+   if(id)employeesById.set(id,e);
+ });
  const faceEntries=Object.entries(state.faces||{});
  for(const [faceEmployeeId,rawRecords] of faceEntries){
-   const employee=employeesById.get(String(faceEmployeeId));
+   const key=String(faceEmployeeId||'').trim();
+   // Firebase face records are keyed by the employee ID. Keep the lookup strict
+   // so one employee's face can never be assigned to another employee.
+   const employee=employeesById.get(key);
    if(!employee)continue;
    const records=normalizeFaceRecords(rawRecords);
    for(const stored of records){

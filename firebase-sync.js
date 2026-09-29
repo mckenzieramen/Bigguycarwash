@@ -46,7 +46,20 @@
     let sales=[],reports=[];
     if(isAdmin()) [sales,reports]=await Promise.all([getAll(C.sales),getAll(C.reports)]);
     const faceMap={},faceTimes={};
-    faces.forEach(r=>{const id=String(r.employeeId||r.id);const samples=normalizeFaceRecord(r.samples);if(samples.length){faceMap[id]=samples;faceTimes[id]=r.updatedAtISO||r.faceUpdatedAt||null;}});
+    // Resolve each face document to the REAL employee ID. Some older records can
+    // contain an employeeId field that is stale/mismatched while the Firestore
+    // document ID is still the correct employee ID. Prefer whichever candidate
+    // actually exists in the current employee collection. This keeps every face
+    // enrollment unique to its employee and prevents DTR from saying
+    // "employee not registered" when the face record itself exists.
+    const employeeIdSet=new Set(employees.map(e=>String(e?.id||e?.employeeId||'').trim()).filter(Boolean));
+    faces.forEach(r=>{
+      const candidates=[r.employeeId,r.id].map(v=>String(v||'').trim()).filter(Boolean);
+      const id=candidates.find(v=>employeeIdSet.has(v));
+      if(!id)return;
+      const samples=normalizeFaceRecord(r.samples);
+      if(samples.length){faceMap[id]=samples;faceTimes[id]=r.updatedAtISO||r.faceUpdatedAt||null;}
+    });
     const attendanceRows=attendance.map(r=>{const x={...r};delete x.id;return x;});
     const salesRows=sales.map(r=>{const x={...r};delete x.id;return x;});
     const reportMap={};reports.forEach(r=>{if(r.id){const x={...r};delete x.id;delete x.date;reportMap[r.date||r.id]=x;}});
