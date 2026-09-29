@@ -79,8 +79,22 @@
         </section>
 
         <section id="employees" class="tab-panel hidden">
-          <div class="card inner"><h2>Employee Management</h2><form id="employeeForm" class="form-grid"><input id="empName" placeholder="Employee name" required><input id="empId" placeholder="Employee ID — auto-generated" readonly><input id="empHireDate" type="date" required><select id="empType"><option value="full">Full Time — ₱250/day</option><option value="semi">Semi Full Time — ₱200/day</option><option value="part">Part Time — ₱150/day</option></select><input id="empStart" type="time" value="08:00" required><button type="submit">ADD EMPLOYEE</button></form><div id="employeeTable"></div><div id="employeeHistory" class="employee-history hidden"></div></div>
-          <div class="card inner"><h2>Face Enrollment</h2><p class="muted">Select an employee, start the camera, then press ENROLL FACE. The system will automatically collect multiple clear face samples. The Employee DTR will then continuously scan and recognize the enrolled employee.</p><select id="enrollEmployee"></select><div class="camera-box admin-camera"><video id="enrollCamera" autoplay muted playsinline></video><div id="enrollOvalFrame" class="face-frame enrollment-oval oval-red"></div><div id="enrollStatus" class="camera-status">Camera not started</div></div><div class="button-row"><button id="startEnrollCamera">START CAMERA</button><button id="enrollFace" disabled>ENROLL FACE</button></div><div id="enrollResult"></div></div>
+          <div class="card inner employee-management-card">
+            <div class="section-kicker">EMPLOYEE SETUP</div>
+            <h2>Add Employee</h2>
+            <p class="muted">Enter the employee details. The Employee ID is generated automatically from the start date and hiring sequence.</p>
+            <form id="employeeForm" class="form-grid employee-form-grid">
+              <div class="field"><label for="empFirstName">First Name</label><input id="empFirstName" placeholder="First name" autocomplete="given-name" required></div>
+              <div class="field"><label for="empLastName">Last Name</label><input id="empLastName" placeholder="Last name" autocomplete="family-name" required></div>
+              <div class="field"><label for="empId">Employee ID</label><input id="empId" placeholder="Auto-generated" readonly aria-readonly="true" class="readonly-field"></div>
+              <div class="field"><label for="empHireDate">Date Started</label><input id="empHireDate" type="date" required></div>
+              <div class="field"><label for="empType">Employment Type</label><select id="empType"><option value="full">Full Time — ₱250/day</option><option value="semi">Semi Full Time — ₱200/day</option><option value="part">Part Time — ₱150/day</option></select></div>
+              <div class="field"><label for="empStart">Scheduled Start</label><input id="empStart" type="time" value="08:00" required></div>
+              <div class="field employee-add-field"><label>&nbsp;</label><button type="submit" class="add-employee-btn">ADD EMPLOYEE &amp; ENROLL FACE</button></div>
+            </form>
+            <div id="employeeTable"></div>
+            <div id="employeeHistory" class="employee-history hidden"></div>
+          </div>
         </section>
         <section id="attendance" class="tab-panel hidden"><div class="card inner"><h2>DTR / Attendance</h2><div id="attendanceTable"></div></div></section>
         <section id="sales" class="tab-panel hidden"><div class="card inner"><h2>Sales</h2><form id="salesForm" class="form-grid"><select id="saleEmployee" required></select><input id="saleAmount" type="number" min="0" step=".01" placeholder="Sale amount ₱" required><input id="saleNote" placeholder="Service / note"><button type="submit">ADD SALE</button></form><div id="salesTable"></div></div></section>
@@ -99,6 +113,21 @@
       </aside>
     </section>
   </main>
+</div>
+
+<div id="enrollmentModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="enrollmentModalTitle">
+  <div class="enrollment-modal-backdrop"></div>
+  <div class="enrollment-modal-card">
+    <div class="enrollment-modal-head">
+      <div><span class="section-kicker">STEP 2 OF 2</span><h2 id="enrollmentModalTitle">Face Enrollment</h2><p id="enrollmentEmployeeLabel" class="muted">Preparing employee face scan…</p></div>
+      <button type="button" id="closeEnrollmentModal" class="modal-close" aria-label="Close">×</button>
+    </div>
+    <div class="enrollment-identity"><div><span>Employee ID</span><strong id="enrollmentEmployeeId">—</strong></div><div><span>Employee</span><strong id="enrollmentEmployeeName">—</strong></div></div>
+    <select id="enrollEmployee" class="hidden" aria-hidden="true"></select>
+    <div class="camera-box admin-camera enrollment-modal-camera"><video id="enrollCamera" autoplay muted playsinline></video><div id="enrollOvalFrame" class="face-frame enrollment-oval oval-red"></div><div id="enrollStatus" class="camera-status">Starting face scan…</div></div>
+    <button id="startEnrollCamera" type="button" class="hidden">START CAMERA</button><button id="enrollFace" type="button" class="hidden" disabled>ENROLL FACE</button>
+    <div id="enrollResult"></div>
+  </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>

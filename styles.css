@@ -27,3 +27,68 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .history-head button:hover{background:#123b68}
 .history-employee{border:1px solid rgba(70,160,255,.35);background:#09284a;color:#fff;border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:5px}
 .history-employee:hover{background:#0d4f8d}
+
+/* Employee setup + automatic enrollment flow */
+.section-kicker{display:inline-block;font-size:10px;letter-spacing:1.5px;font-weight:800;color:#65b6ff;margin-bottom:6px}
+.employee-management-card h2{margin:0 0 5px;font-size:22px}
+.employee-management-card>.muted{margin:0 0 16px;line-height:1.5}
+.employee-form-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.employee-form-grid .field{min-width:0}
+.employee-form-grid .field label{margin-top:0}
+.employee-form-grid .employee-add-field{grid-column:span 2}
+.employee-form-grid .add-employee-btn{width:100%;min-height:47px}
+.readonly-field{background:#152230!important;color:#91a3b4!important;border-color:#294159!important;cursor:not-allowed;opacity:.9}
+#employeeTable{margin-top:20px;overflow-x:auto;border:1px solid #163149;border-radius:12px}
+.face-employee{background:#0a684d;padding:8px 11px;font-size:12px}
+.face-employee:hover{background:#0d8b68}
+.enrollment-modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px}
+.enrollment-modal-backdrop{position:absolute;inset:0;background:rgba(0,5,12,.82);backdrop-filter:blur(10px)}
+.enrollment-modal-card{position:relative;width:min(760px,100%);max-height:calc(100vh - 36px);overflow:auto;padding:20px;border:1px solid #235078;border-radius:22px;background:linear-gradient(145deg,#091a2b,#030c16);box-shadow:0 28px 90px #000b,0 0 55px #1687ff18}
+.enrollment-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.enrollment-modal-head h2{margin:0;font-size:25px}
+.enrollment-modal-head p{margin:5px 0 0}
+.modal-close{width:38px;height:38px;padding:0;border-radius:50%;font-size:25px;line-height:1;background:#10273c;border:1px solid #29445c;box-shadow:none;flex:none}
+.enrollment-identity{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin:16px 0 12px}
+.enrollment-identity>div{padding:12px 14px;border:1px solid #19364f;border-radius:12px;background:#071726}
+.enrollment-identity span,.enrollment-identity strong{display:block}
+.enrollment-identity span{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8ea6ba}
+.enrollment-identity strong{margin-top:4px;font-size:15px}
+.enrollment-modal-camera{width:100%;max-width:680px;margin:10px auto 12px;aspect-ratio:4/3;min-height:0;height:auto;background:#010509;border:1px solid #173149}
+.enrollment-modal-camera video{width:100%;height:100%;min-height:0;object-fit:cover}
+.enrollment-modal-camera .face-frame{width:46%;height:82%;max-width:300px;max-height:420px}
+.enrolled-success{margin:14px auto 0;padding:20px;border-radius:16px;border:1px solid #18df8a66;background:linear-gradient(145deg,#063a2a,#062318);text-align:center;box-shadow:0 0 35px #18df8a18}
+.enrolled-check{width:54px;height:54px;margin:0 auto 10px;border-radius:50%;display:grid;place-items:center;background:#18df8a;color:#032116;font-size:30px;font-weight:900;box-shadow:0 0 25px #18df8a66}
+.enrolled-success strong,.enrolled-success span,.enrolled-success small{display:block}
+.enrolled-success strong{font-size:18px;color:#6ff0b1;letter-spacing:.6px}
+.enrolled-success span{margin-top:5px;font-size:15px;color:#fff}
+.enrolled-success small{margin-top:4px;color:#93b7a7}
+.enrollment-progress{line-height:1.45}
+
+@media(max-width:950px){
+ .employee-form-grid{grid-template-columns:1fr 1fr}
+ .employee-form-grid .employee-add-field{grid-column:1/-1}
+ .enrollment-modal{padding:10px}
+ .enrollment-modal-card{max-height:calc(100vh - 20px);padding:16px;border-radius:18px}
+}
+@media(max-width:600px){
+ html,body{width:100%;max-width:100%;overflow-x:hidden}
+ input,select,button{font-size:16px}
+ .admin-main{padding:12px 8px 24px}
+ .dashboard-header{padding:0 3px;margin-bottom:12px}
+ .dashboard-header h1{font-size:23px}
+ .dashboard-header p{font-size:12px;line-height:1.35}
+ .employee-management-card{padding:16px 12px}
+ .employee-form-grid{grid-template-columns:1fr;gap:9px}
+ .employee-form-grid .employee-add-field{grid-column:auto}
+ .employee-form-grid .add-employee-btn{min-height:50px}
+ .enrollment-modal{padding:0}
+ .enrollment-modal-card{width:100%;height:100%;max-height:none;border-radius:0;border-left:0;border-right:0;padding:14px 12px 18px}
+ .enrollment-modal-head h2{font-size:22px}
+ .enrollment-identity{grid-template-columns:1fr 1.35fr;gap:7px;margin:12px 0 9px}
+ .enrollment-identity>div{padding:10px 11px}
+ .enrollment-modal-camera{margin:8px auto 10px;width:100%;aspect-ratio:3/4;max-width:520px;border-radius:18px}
+ .enrollment-modal-camera .face-frame{width:50%;height:78%;border-width:3px}
+ .camera-status{left:8px;right:8px;bottom:8px;font-size:13px;padding:8px}
+ .enrolled-success{padding:18px 12px}
+ #employeeTable{margin-left:-4px;margin-right:-4px;border-radius:10px}
+}

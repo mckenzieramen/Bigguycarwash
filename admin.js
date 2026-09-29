@@ -8,7 +8,16 @@ state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 let enrollStream=null,modelsReady=false;
 const $=id=>document.getElementById(id);
-const save=()=>{localStorage.setItem(KEY,JSON.stringify(state)); if(window.BIGGUYS_CLOUD?.ready) window.BIGGUYS_CLOUD.push(state).catch(console.warn);};
+const save=()=>{
+ localStorage.setItem(KEY,JSON.stringify(state));
+ if(window.BIGGUYS_CLOUD?.ready) return window.BIGGUYS_CLOUD.push(state).catch(console.warn);
+ return Promise.resolve();
+};
+async function syncAdminNow(){
+ if(!window.BigGuysCloud?.configured) return;
+ await window.BigGuysCloud.init(state,null,'admin');
+ await window.BigGuysCloud.push(state);
+}
 function syncStateFromStorage(){
  try{const raw=JSON.parse(localStorage.getItem(KEY)||"{}");if(!raw||typeof raw!=="object")return;state.employees=Array.isArray(raw.employees)?raw.employees:[];state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];state.sales=Array.isArray(raw.sales)?raw.sales:[];state.faces=raw.faces&&typeof raw.faces==="object"?raw.faces:{};state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{}}catch(e){console.warn("Could not sync dashboard data",e)}
 }
@@ -98,9 +107,10 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*commRate(a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  $("attendanceTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);return[e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",statusBadge(a?.status||"awol")]}),["ID","Employee","Scheduled","Clock In","Clock Out","Status"]);
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
- document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
+document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
+document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  $("payrollTable").innerHTML=table(state.employees.map(e=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[e.name,e.type,a?.status||"AWOL",money(sales),a?((commRate(a.status)*100)+"%"):"30%",money(pay(e,d))]}),["Employee","Type","Status","Sales","Commission","Daily Pay"]);
@@ -166,17 +176,34 @@ $("logoutBtn").onclick=async()=>{
   try{await BigGuysCloud.adminLogout();}catch(e){console.warn(e)}
   $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";document.body.classList.remove("logged-in");
 };
-$("employeeForm").onsubmit=e=>{
+$("employeeForm").onsubmit=async e=>{
  e.preventDefault();
- const hireDate=$("empHireDate").value||today();
- const id=nextEmployeeId(hireDate);
- state.employees.push({id,name:$("empName").value.trim(),type:$("empType").value,start:$("empStart").value,hireDate});
- save();
- e.target.reset();
- $("empStart").value="08:00";
- $("empHireDate").value=today();
- updateEmployeeIdPreview();
- refresh();
+ const btn=e.target.querySelector('button[type="submit"]');
+ const first=$("empFirstName").value.trim(),last=$("empLastName").value.trim();
+ if(!first||!last)return;
+ if(btn){btn.disabled=true;btn.textContent='SAVING EMPLOYEE…';}
+ try{
+   await window.BigGuysCloud?.init?.(state,remote=>{
+     state=remote;
+     localStorage.setItem(KEY,JSON.stringify(state));
+   },'admin');
+   const hireDate=$("empHireDate").value||today();
+   const id=nextEmployeeId(hireDate);
+   state.employees.push({id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate});
+   localStorage.setItem(KEY,JSON.stringify(state));
+   await syncAdminNow();
+   e.target.reset();
+   $("empStart").value='08:00';
+   $("empHireDate").value=today();
+   updateEmployeeIdPreview();
+   refresh();
+   await openEnrollmentModal(id);
+ }catch(err){
+   console.error('Employee creation failed:',err);
+   alert('Employee was not fully saved. Please check the Firebase connection and try again.');
+ }finally{
+   if(btn){btn.disabled=false;btn.textContent='ADD EMPLOYEE & ENROLL FACE';}
+ }
 };
 $("salesForm").onsubmit=e=>{e.preventDefault();state.sales.push({date:today(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value),note:$("saleNote").value});save();e.target.reset();refresh()};
 document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
@@ -210,35 +237,96 @@ async function captureEnrollmentSample(id){
  frame?.classList.toggle("oval-red",!good);
  if(!good)return false;
  enrollmentSamples.push(Array.from(d.descriptor));
- $("enrollResult").innerHTML=`<div class="result success">Capturing face samples: <strong>${enrollmentSamples.length}/8</strong><br>Keep your face centered and make small natural movements.</div>`;
+ $("enrollResult").innerHTML=`<div class="result success enrollment-progress">Capturing face samples: <strong>${enrollmentSamples.length}/8</strong><br><small>Keep your face centered inside the green oval.</small></div>`;
  return true;
 }
+function stopEnrollmentCamera(){
+ if(enrollStream){enrollStream.getTracks().forEach(t=>t.stop());enrollStream=null;}
+ const v=$("enrollCamera");if(v)v.srcObject=null;
+}
+function closeEnrollmentModal(){
+ stopEnrollmentCamera();
+ enrollmentRunning=false;
+ $("enrollmentModal")?.classList.add('hidden');
+}
 async function runAutoEnrollment(){
- const id=$("enrollEmployee").value;if(!id||enrollmentRunning)return;
- enrollmentRunning=true;enrollmentSamples=[];$("enrollFace").disabled=true;
+ const id=$("enrollEmployee").value;if(!id||enrollmentRunning)return false;
+ enrollmentRunning=true;enrollmentSamples=[];
  $("enrollStatus").textContent="Automatic enrollment started — keep your face inside the green oval.";
+ $("enrollResult").innerHTML='';
  let attempts=0;
- while(enrollmentSamples.length<8&&attempts<80){
+ while(enrollmentSamples.length<8&&attempts<110&&enrollmentRunning){
    attempts++;
-   const ok=await captureEnrollmentSample(id);
-   if(!ok)$("enrollStatus").textContent="🔴 Keep your face fully inside the oval and look toward the camera.";
-   else $("enrollStatus").textContent=`🟢 Face aligned — captured ${enrollmentSamples.length}/8 samples.`;
-   await new Promise(r=>setTimeout(r,500));
+   try{
+     const ok=await captureEnrollmentSample(id);
+     if(!ok)$("enrollStatus").textContent="🔴 Keep your face fully inside the oval and look toward the camera.";
+     else $("enrollStatus").textContent=`🟢 Face aligned — captured ${enrollmentSamples.length}/8 samples.`;
+   }catch(err){console.warn('Enrollment detection error:',err);}
+   await new Promise(r=>setTimeout(r,350));
  }
  if(enrollmentSamples.length>=5){
    state.faces[id]=enrollmentSamples;
-   save();
-   $("enrollStatus").textContent="✓ Face enrollment complete. 8 sample slots were collected when available.";
-   $("enrollResult").innerHTML=`<div class="result success">✓ Employee face enrolled successfully.<br><small>${enrollmentSamples.length} face samples saved. The DTR can now recognize this employee automatically.</small></div>`;
-   refresh();
+   localStorage.setItem(KEY,JSON.stringify(state));
+   try{
+     await syncAdminNow();
+     const employee=state.employees.find(e=>e.id===id);
+     $("enrollStatus").textContent="✓ Employee enrolled successfully.";
+     $("enrollResult").innerHTML=`<div class="enrolled-success"><div class="enrolled-check">✓</div><strong>EMPLOYEE ENROLLED</strong><span>${employee?.name||''}</span><small>${id} • Face saved to Firebase</small></div>`;
+     refresh();
+     setTimeout(closeEnrollmentModal,1400);
+     enrollmentRunning=false;
+     return true;
+   }catch(err){
+     console.error('Face enrollment cloud save failed:',err);
+     $("enrollStatus").textContent="Face captured, but cloud save failed. Please try again.";
+     $("enrollResult").innerHTML='<div class="result late-result">The face was captured, but Firebase did not confirm the save. Please try again.</div>';
+   }
  }else{
-   $("enrollStatus").textContent="Enrollment failed — not enough clear face samples were captured. Try again with better lighting and keep the face centered.";
-   $("enrollResult").innerHTML='<div class="result late-result">Could not capture enough clear samples. Please start the camera again and try once more.</div>';
+   $("enrollStatus").textContent="Enrollment failed — not enough clear face samples were captured.";
+   $("enrollResult").innerHTML='<div class="result late-result">Could not capture enough clear samples. Keep your face centered and try again.</div>';
  }
- enrollmentRunning=false;$("enrollFace").disabled=false;
+ enrollmentRunning=false;
+ return false;
 }
-$("startEnrollCamera").onclick=async()=>{if(!await loadModels())return;try{enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});$("enrollCamera").srcObject=enrollStream;$('enrollFace').disabled=false;$('enrollStatus').textContent="Camera ready — press ENROLL FACE to begin automatic multi-sample capture."}catch(e){$('enrollStatus').textContent="Camera permission denied or unavailable."}};
+async function startEnrollmentCamera(){
+ if(!await loadModels())return false;
+ try{
+   stopEnrollmentCamera();
+   enrollStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:720},height:{ideal:720}},audio:false});
+   const video=$("enrollCamera");
+   video.srcObject=enrollStream;
+   await new Promise(resolve=>{
+     if(video.readyState>=2)return resolve();
+     video.onloadedmetadata=()=>resolve();
+   });
+   try{await video.play();}catch(e){}
+   $("enrollStatus").textContent="Camera ready — position your face inside the oval.";
+   return true;
+ }catch(e){
+   console.error(e);
+   $("enrollStatus").textContent="Camera permission denied or unavailable. Please allow camera access and try again.";
+   return false;
+ }
+}
+async function openEnrollmentModal(id){
+ const employee=state.employees.find(e=>e.id===id);
+ if(!employee)return;
+ const modal=$("enrollmentModal"),select=$("enrollEmployee");
+ if(select){select.innerHTML=`<option value="${employee.id}">${employee.name} (${employee.id})</option>`;select.value=employee.id;}
+ $("enrollmentEmployeeName").textContent=employee.name;
+ $("enrollmentEmployeeId").textContent=employee.id;
+ $("enrollmentEmployeeLabel").textContent="Position your face inside the oval. Enrollment will start automatically.";
+ $("enrollResult").innerHTML='';
+ $("enrollOvalFrame")?.classList.remove('oval-green');
+ $("enrollOvalFrame")?.classList.add('oval-red');
+ modal?.classList.remove('hidden');
+ const cameraReady=await startEnrollmentCamera();
+ if(cameraReady) await runAutoEnrollment();
+}
+$("startEnrollCamera").onclick=startEnrollmentCamera;
 $("enrollFace").onclick=runAutoEnrollment;
+$("closeEnrollmentModal").onclick=closeEnrollmentModal;
+$("enrollmentModal")?.querySelector('.enrollment-modal-backdrop')?.addEventListener('click',()=>{if(!enrollmentRunning)closeEnrollmentModal();});
 
 function showEmployeeHistory(id){
  const e=state.employees.find(x=>x.id===id);

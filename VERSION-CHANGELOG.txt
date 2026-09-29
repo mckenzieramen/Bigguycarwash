@@ -1,0 +1,19 @@
+BIG GUY'S CARWASH — v7 SAFE EDIT
+
+Requested changes:
+- Employee creation now uses First Name + Last Name.
+- Employee ID remains automatic and read-only/gray-out.
+- Employee ID format remains YYYYMM + monthly hiring sequence.
+- Date Started drives the Employee ID prefix.
+- Employment Type remains Full Time / Semi Full Time / Part Time.
+- Add Employee now immediately opens the automatic Face Enrollment step.
+- Face camera starts automatically; no manual START CAMERA / ENROLL FACE step is required.
+- Successful capture shows EMPLOYEE ENROLLED and saves the face data to Firebase.
+- Employee data is explicitly synchronized to Firebase before the enrollment step.
+- Added FACE action for re-enrolling an existing employee.
+- Improved mobile responsive layout, camera sizing, modal sizing, and input font sizing to avoid mobile zoom.
+
+Preserved:
+- Existing Firebase Admin Login credentials/config.
+- Existing dashboard, DTR, sales, payroll, reports, attendance and face-recognition logic.
+- Existing Employee ID generation behavior.
