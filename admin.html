@@ -189,6 +189,24 @@
     <div class="enrollment-steps" aria-label="Face enrollment steps"><span>1 Normal</span><span>2 Left</span><span>3 Right</span><span>4 Up/Down</span><span>5 Normal</span></div><div id="enrollResult"></div>
   </div>
 </div>
+
+<div id="faceScanPasswordModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="faceScanPasswordTitle">
+  <div class="enrollment-modal-backdrop"></div>
+  <div class="enrollment-modal-card face-password-card">
+    <div class="enrollment-modal-head">
+      <div><span class="section-kicker">PROTECTED AREA</span><h2 id="faceScanPasswordTitle">Face Scan Access</h2><p class="muted">Enter the Face Scan password to continue.</p></div>
+    </div>
+    <div class="field">
+      <label for="faceScanPassword">Password</label>
+      <input id="faceScanPassword" type="password" autocomplete="off" placeholder="Enter password">
+    </div>
+    <div id="faceScanPasswordError" class="login-error" role="alert"></div>
+    <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button type="button" id="cancelFaceScanPassword" class="secondary-btn">CANCEL</button>
+      <button type="button" id="unlockFaceScan" class="primary-btn">UNLOCK FACE SCAN</button>
+    </div>
+  </div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
