@@ -229,7 +229,7 @@ function refresh(){
  renderAttendanceAdmin(attendanceDateValue());
  $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
-document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>requestFaceScanAccess(btn.dataset.id));
+document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
  renderSettings();
@@ -326,7 +326,7 @@ $("employeeForm").onsubmit=async e=>{
    $("empHireDate").value=today();
    updateEmployeeIdPreview();
    refresh();
-   requestFaceScanAccess(id);
+   openEnrollmentModal(id);
  }catch(err){
    console.error('Employee creation failed:',err);
    alert('Employee was not fully saved. Please check the Firebase connection and try again.');
@@ -485,44 +485,6 @@ async function startEnrollmentCamera(){
    return false;
  }
 }
-const FACE_SCAN_PASSWORD="BigGuyFace@2026";
-const FACE_SCAN_SESSION_KEY="bigguys_face_scan_unlocked";
-let pendingFaceScanEmployeeId=null;
-function isFaceScanUnlocked(){try{return sessionStorage.getItem(FACE_SCAN_SESSION_KEY)==="1";}catch(e){return false;}}
-function showFaceScanPassword(id){
- pendingFaceScanEmployeeId=id;
- const modal=$("faceScanPasswordModal");
- const input=$("faceScanPassword");
- const error=$("faceScanPasswordError");
- if(error)error.textContent="";
- if(input){input.value="";}
- modal?.classList.remove("hidden");
- setTimeout(()=>input?.focus(),50);
-}
-function closeFaceScanPassword(){
- $("faceScanPasswordModal")?.classList.add("hidden");
- pendingFaceScanEmployeeId=null;
-}
-function unlockFaceScan(){
- const input=$("faceScanPassword"),error=$("faceScanPasswordError");
- if(input?.value===FACE_SCAN_PASSWORD){
-   try{sessionStorage.setItem(FACE_SCAN_SESSION_KEY,"1");}catch(e){}
-   const id=pendingFaceScanEmployeeId;
-   closeFaceScanPassword();
-   if(id)openEnrollmentModal(id);
- }else{
-   if(error)error.textContent="Incorrect Face Scan password.";
-   if(input){input.value="";input.focus();}
- }
-}
-function requestFaceScanAccess(id){
- if(isFaceScanUnlocked())return openEnrollmentModal(id);
- showFaceScanPassword(id);
-}
-$("unlockFaceScan")?.addEventListener("click",unlockFaceScan);
-$("cancelFaceScanPassword")?.addEventListener("click",closeFaceScanPassword);
-$("faceScanPassword")?.addEventListener("keydown",e=>{if(e.key==="Enter")unlockFaceScan();if(e.key==="Escape")closeFaceScanPassword();});
-$("faceScanPasswordModal")?.querySelector(".enrollment-modal-backdrop")?.addEventListener("click",closeFaceScanPassword);
 
 async function openEnrollmentModal(id){
  const employee=state.employees.find(e=>e.id===id);

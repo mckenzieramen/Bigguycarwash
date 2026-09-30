@@ -257,4 +257,9 @@ $("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");asyn
  return true;
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
-window.addEventListener("load",async()=>{if(await initCloud())startCamera();});
+async function bootDTR(){
+ if(!window.__DTR_ACCESS_UNLOCKED__)return;
+ if(await initCloud())startCamera();
+}
+window.addEventListener("dtr-access-unlocked",bootDTR);
+window.addEventListener("load",bootDTR);
