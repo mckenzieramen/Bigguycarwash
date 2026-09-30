@@ -133,3 +133,18 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .off-days-summary strong{color:#fff}
 @media(max-width:900px){.settings-form-grid{grid-template-columns:1fr}.sales-expense-summary{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.sales-expense-summary{grid-template-columns:1fr}.card-heading:has(#attendanceDate){align-items:flex-start;flex-direction:column}}
+
+/* V49 mobile navigation + premium icon polish */
+.kpi-icon svg,.calendar-icon svg,.heading-icon svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.calendar-icon{display:grid;place-items:center;width:30px;height:30px}.heading-icon{display:inline-grid;vertical-align:-5px;place-items:center;margin-right:7px;color:#4ba4ff}.heading-icon svg{width:18px;height:18px}.kpi-icon svg{width:24px;height:24px}
+@media(max-width:950px){
+  .dashboard-right{display:none!important}
+  .dashboard-header{position:sticky;top:0;z-index:25;background:linear-gradient(180deg,#030d18 78%,rgba(3,13,24,0));padding:8px 4px 16px;margin-left:-4px;margin-right:-4px}
+  .mobile-menu{position:sticky;top:8px;z-index:60;display:grid!important;place-items:center;width:58px;height:58px;padding:0;margin:0 10px 0 0;border-radius:16px;background:#071827;border:1px solid #173149;color:#eaf4ff;font-size:0;box-shadow:0 10px 30px #0007}
+  .mobile-menu:before{content:'☰';font-size:31px;line-height:1}
+  .admin-sidebar{box-shadow:20px 0 60px #000b}
+  .admin-sidebar.open{transform:translateX(0);}
+}
+@media(max-width:600px){
+  .dashboard-header{gap:8px}.dashboard-header>div:nth-child(2){min-width:0}.dashboard-header h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kpi-card{min-height:92px;padding:13px}.kpi-icon{width:42px;height:42px}
+  .income-card .donut-wrap{min-height:230px;display:grid;place-items:center;overflow:visible}.income-card .donut{margin:auto;width:170px;height:170px}
+}
