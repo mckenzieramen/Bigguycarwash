@@ -19,6 +19,19 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 @media(max-width:700px){.dashboard-header h1{font-size:25px}.dashboard-header p{font-size:13px}.header-date{display:none}.kpi-grid,.chart-grid,.summary-grid{grid-template-columns:1fr}.income-card,.summary-grid .recent-sales-card{grid-column:auto}.form-grid{grid-template-columns:1fr}.reconciliation-grid{grid-template-columns:1fr 1fr}.digital-clock{font-size:34px}.status-visual{height:240px;margin-left:8px;margin-right:8px}.right-brand{height:120px}.right-brand img{width:230px}}
 @media(max-width:480px){.admin-main{padding:12px 8px}.login-card{margin:35px 8px;padding:20px}.kpi-card b{font-size:21px}.reconciliation-grid{grid-template-columns:1fr}.table{min-width:650px}.attendance-card,.summary-grid .dashboard-card,.chart-card,.income-card{overflow-x:auto}.sidebar-brand{height:145px}.sidebar-brand img{width:190px}}
 
+
+/* Targeted mobile table scrolling: keep the page fixed, scroll only the data table. */
+.mobile-table-scroll{width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#1d8cff #071522;}
+.mobile-table-scroll>.table{min-width:max-content;}
+@media(max-width:480px){
+  .mobile-table-scroll{border-radius:10px;touch-action:pan-x pan-y;}
+  .mobile-table-scroll>.table{min-width:760px;}
+  .attendance-card,.summary-grid .dashboard-card,.chart-card,.income-card{overflow:hidden;}
+  .income-card .donut{width:132px;height:132px;}
+  .income-card .donut:before{width:90px;height:90px;}
+  .income-card .donut-wrap{padding-top:10px;padding-bottom:8px;}
+}
+
 /* Employee DTR history panel */
 .employee-history{margin-top:18px;padding:18px;border:1px solid rgba(80,150,220,.22);border-radius:16px;background:rgba(7,20,34,.72);box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .history-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
