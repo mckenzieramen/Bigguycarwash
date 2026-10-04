@@ -304,7 +304,38 @@ async function saveEmployeeOffDays(){
 }
 function renderScheduleRoster(){
  const root=$("scheduleRoster");if(!root)return; const days=WEEKDAYS.slice(1);
- root.innerHTML=Object.entries(DTR_SITES).map(([siteId,site])=>`<div class="site-roster-card"><div class="site-roster-title"><strong>${site.name}</strong><span>${site.lat}, ${site.lng}</span></div><div class="site-roster-scroll"><div class="site-roster-grid"><div class="site-roster-corner">#</div>${days.map(d=>`<div class="site-roster-day">${d.toUpperCase()}</div>`).join("")}${state.employees.map((e,i)=>{const schedule=scheduleForEmployee(e);const activeDays=days.map(day=>schedule[day]===siteId?e.name:"—");return activeDays.some(v=>v!=="—")?`<div class="site-roster-num">${i+1}</div>${activeDays.map(v=>`<div class="site-roster-cell">${v}</div>`).join("")}`:""}).join("")}</div></div></div>`).join("");
+ const dayColors={Monday:"mon",Tuesday:"tue",Wednesday:"wed",Thursday:"thu",Friday:"fri",Saturday:"sat",Sunday:"sun"};
+ const siteOrder=["site2","site3","site1"];
+ const siteCards=siteOrder.map(siteId=>{
+   const site=DTR_SITES[siteId];
+   const rows=state.employees.map((e,i)=>{
+     const schedule=scheduleForEmployee(e);
+     const active=days.map(day=>schedule[day]===siteId?e.name:"");
+     if(!active.some(Boolean))return "";
+     return `<div class="site-roster-num">${i+1}</div>${active.map((name,idx)=>`<div class="site-roster-cell ${name?"has-name":"empty"}" data-day="${days[idx]}">${name||""}</div>`).join("")}`;
+   }).join("");
+   return `<div class="site-roster-card">
+     <div class="site-roster-title"><div><strong>${site.name}</strong><small>${site.lat}, ${site.lng}</small></div><span class="site-roster-badge">WEEKLY ROSTER</span></div>
+     <div class="site-roster-scroll"><div class="site-roster-grid">
+       <div class="site-roster-corner">#</div>${days.map(d=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}</div>`).join("")}
+       ${rows || `<div class="site-roster-empty">No employees scheduled at ${site.name}.</div>`}
+     </div></div>
+   </div>`;
+ }).join("");
+ const offRows=state.employees.map((e,i)=>{
+   const schedule=scheduleForEmployee(e);
+   const active=days.map(day=>schedule[day]==="off"||employeeOffDays(e).includes(day)?e.name:"");
+   if(!active.some(Boolean))return "";
+   return `<div class="site-roster-num">${i+1}</div>${active.map((name,idx)=>`<div class="site-roster-cell ${name?"has-name":"empty"}" data-day="${days[idx]}">${name||""}</div>`).join("")}`;
+ }).join("");
+ const dayoffCard=`<div class="site-roster-card dayoff-roster-card">
+   <div class="site-roster-title"><div><strong>Day Off</strong><small>Employees marked OFF / not scheduled</small></div><span class="site-roster-badge">OFF</span></div>
+   <div class="site-roster-scroll"><div class="site-roster-grid">
+     <div class="site-roster-corner">#</div>${days.map(d=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}</div>`).join("")}
+     ${offRows || `<div class="site-roster-empty">No day-off assignments.</div>`}
+   </div></div>
+ </div>`;
+ root.innerHTML=siteCards+dayoffCard;
 }
 function scrollContainerKey(el,i=0){
  const host=el.closest('[id]');
