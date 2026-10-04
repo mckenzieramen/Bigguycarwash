@@ -187,6 +187,21 @@ function refreshRightPanel(){
  const title=$("rightStatusTitle"),text=$("rightStatusText"),notice=$("rightNoticeTitle"),noticeText=$("rightNoticeText");
  if(e){const attendance=a&&a.employeeId===e.id?a:state.attendance.find(x=>x.employeeId===e.id&&x.date===d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}
 }
+
+function wrapTableScroll(id){
+ const host=$(id);
+ if(!host)return;
+ const t=host.querySelector(':scope > table');
+ if(!t)return;
+ const wrap=document.createElement('div');
+ wrap.className='table-scroll';
+ host.replaceChildren(wrap);
+ wrap.appendChild(t);
+}
+function wrapAllTableScrolls(){
+ ['overviewAttendance','employeeTable','attendanceTable','salesTable','payrollTable','payrollDailyTable','reportOutput','reportMonthlyEmployees','topSalesToday','employeeTypeSummary','recentSales'].forEach(wrapTableScroll);
+}
+
 function renderAttendanceAdmin(date){
  const target=date||today();
  if($("attendanceDate") && $("attendanceDate").value!==target)$("attendanceDate").value=target;
@@ -203,6 +218,7 @@ function renderAttendanceAdmin(date){
  });
  $("attendanceTable").innerHTML=table(rows,["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission","Daily Pay","Action"]);
  document.querySelectorAll(".mark-excuse").forEach(btn=>btn.onclick=()=>markEmployeeExcuse(btn.dataset.id,btn.dataset.date));
+ wrapTableScroll("attendanceTable");
 }
 async function markEmployeeExcuse(employeeId,date){
  const e=state.employees.find(x=>String(x.id)===String(employeeId));
@@ -268,6 +284,7 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  renderSettings();
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
+ wrapAllTableScrolls();
  renderPayroll();
  const top=state.employees.map(e=>({name:e.name,sales:state.sales.filter(s=>s.date===d&&s.employeeId===e.id).reduce((t,s)=>t+Number(s.amount||0),0)})).filter(x=>x.sales>0).sort((a,b)=>b.sales-a.sales);
  $("topSalesToday").innerHTML=table(top.slice(0,6).map((x,i)=>[i+1,x.name,money(x.sales)]),["#","Employee","Sales"]);
