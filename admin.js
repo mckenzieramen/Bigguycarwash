@@ -9,6 +9,8 @@ state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?s
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 state.scheduleWeekOf=state.scheduleWeekOf||"";
 let enrollStream=null,modelsReady=false;
+// Start the schedule screen as a blank, unsaved draft without deleting any saved Firebase schedule/time data.
+let scheduleBlankDraft=true;
 let attendanceCaptureDisplayedKey=null;
 let selectedDtrEmployeeId="";
 let attendanceCaptureHideTimer=null;
@@ -67,9 +69,13 @@ function scheduleForEmployee(e,dateOrWeek=today(),useLegacy=true){
  const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?e.weeklySchedules:{};
  const hasSavedWeek=Object.prototype.hasOwnProperty.call(weekly,weekKey)&&weekly[weekKey]&&typeof weekly[weekKey]==="object";
  const legacy=e?.weeklySchedule&&typeof e.weeklySchedule==="object"?e.weeklySchedule:{};
- const existing=hasSavedWeek?weekly[weekKey]:(useLegacy?legacy:{});
+ const useSavedWeek=hasSavedWeek;
+ const existing=useSavedWeek?weekly[weekKey]:(useLegacy&&!Object.keys(weekly).length?legacy:{});
  const out={};
- WEEKDAYS.slice(1).forEach(day=>{out[day]=SCHEDULE_SITE_OPTIONS.includes(existing[day])?existing[day]:"off";});
+ WEEKDAYS.slice(1).forEach(day=>{
+   const value=existing?.[day];
+   out[day]=SCHEDULE_SITE_OPTIONS.includes(value)?value:"";
+ });
  return out;
 }
 function scheduledSiteId(e,date=today()){
@@ -358,8 +364,9 @@ async function saveRosterSchedule(){
    });
    const employees=state.employees.map(e=>{
      const weeklySchedules=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
-     const next={Monday:"off",Tuesday:"off",Wednesday:"off",Thursday:"off",Friday:"off",Saturday:"off",Sunday:"off"};
-     WEEKDAYS.slice(1).forEach(day=>{next[day]=selectedByDay[day][String(e.id)]||"off";});
+     // A new week starts completely blank. Only an explicitly selected Day Off is saved as "off".
+     const next={Monday:"",Tuesday:"",Wednesday:"",Thursday:"",Friday:"",Saturday:"",Sunday:""};
+     WEEKDAYS.slice(1).forEach(day=>{next[day]=selectedByDay[day][String(e.id)]||"";});
      weeklySchedules[weekOf]=next;
      return {...e,weeklySchedules};
    });
@@ -371,6 +378,7 @@ async function saveRosterSchedule(){
    }
    state.employees=employees;
    state.scheduleWeekOf=weekOf;
+   scheduleBlankDraft=false;
    cacheState();
    renderSchedules();renderAttendanceAdmin(attendanceDateValue());renderPayroll();refresh();
    alert(`Schedule saved for the week of ${prettyScheduleDate(weekOf)}.`);
@@ -386,8 +394,10 @@ function renderScheduleRoster(){
  const rowLimits={site1:10,site2:5,site3:5,off:5};
  const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
  const employeeAt=(siteId,day,rowIndex)=>{
+   if(scheduleBlankDraft)return "";
    const matches=state.employees.filter(e=>{
-     const useLegacy=weekOf===state.scheduleWeekOf;
+     const hasWeeklySchedules=e?.weeklySchedules&&typeof e.weeklySchedules==="object"&&Object.keys(e.weeklySchedules).length>0;
+     const useLegacy=!hasWeeklySchedules;
      const schedule=scheduleForEmployee(e,weekOf,useLegacy);
      return siteId==="off"?schedule[day]==="off":schedule[day]===siteId;
    });

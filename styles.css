@@ -204,3 +204,11 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .site-roster-title small{color:#7f9db5 !important;}
 .site-roster-card:not(.dayoff-roster-card) .site-roster-title strong{color:#fff !important;}
 .site-roster-select option:disabled{color:#5c7080;background:#06131f;}
+
+/* V79 schedule dropdown readability: selected names and native dropdown options stay light on every day/site, including Sunday. */
+.site-roster-select{color:#eaf4fb !important;background:#06131f !important;}
+.site-roster-select option{color:#eaf4fb !important;background:#071827 !important;}
+.site-roster-select option:disabled{color:#6f8292 !important;background:#06131f !important;}
+.site-roster-cell.empty .site-roster-select{color:#eaf4fb !important;}
+.site-roster-day.sun{background:#808080 !important;color:#fff !important;}
+.site-roster-title strong,.site-roster-title small{color:#eaf4fb !important;}
