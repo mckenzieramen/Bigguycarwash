@@ -154,13 +154,12 @@
     <h2>Schedules</h2>
     <p class="muted">Set where each employee is scheduled for every day. The employee's DTR site is automatically based on today's schedule. Face scan and attendance are only valid when the employee is physically at the site scheduled for that day.</p>
     <div class="settings-form-grid schedule-select-grid">
-      <div class="field"><label for="scheduleEmployee">Employee</label><select id="scheduleEmployee"><option value="">Select Employee</option></select></div>
-      <div class="field"><label>Regular Days Off</label><div id="employeeOffDays" class="off-days-grid"></div></div>
-      <div class="settings-actions"><button type="button" id="saveOffDays" class="small-action">SAVE DAYS OFF</button></div>
+      <div class="field"><label for="scheduleWeekOf">Schedule Week / Date</label><input id="scheduleWeekOf" type="date" aria-label="Schedule week date"></div>
+      <div class="field"><label>How to use</label><div class="schedule-date-help">Select a date for the schedule week, then choose an employee in any Site/Day slot. Each employee can only occupy one site per day.</div></div>
+      <div class="settings-actions"><button type="button" id="saveRosterSchedule" class="small-action">SAVE SCHEDULE</button></div>
     </div>
-    <div id="offDaysSummary" class="off-days-summary"></div>
-    <div class="schedule-editor-wrap"><div id="scheduleEditor" class="schedule-editor"></div></div>
-    <div class="schedule-board-wrap"><div class="section-kicker">SITE ROSTER</div><p class="muted">Weekly view by Site 1, Site 2, and Site 3.</p><div id="scheduleRoster" class="schedule-roster"></div></div>
+    <div id="scheduleWeekSummary" class="off-days-summary"></div>
+    <div class="schedule-board-wrap"><div class="section-kicker">SITE ROSTER</div><p class="muted">Every slot is a dropdown containing all employees. The selected employee becomes valid only for that site's day. Blank slots stay blank.</p><div id="scheduleRoster" class="schedule-roster"></div></div>
   </div>
 </section>
       </div>
