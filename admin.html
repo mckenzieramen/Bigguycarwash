@@ -152,14 +152,29 @@
   <div class="card inner schedule-manager-card">
     <div class="section-kicker">WEEKLY SITE SCHEDULE</div>
     <h2>Schedules</h2>
-    <p class="muted">Set where each employee is scheduled for every day. The employee's DTR site is automatically based on today's schedule. Face scan and attendance are only valid when the employee is physically at the site scheduled for that day.</p>
+    <p class="muted">Create a weekly schedule, save it, then find it under Scheduled. Saved schedules can be opened, edited, and saved again. Schedules older than 4 weeks are automatically removed from Firebase to reduce storage.</p>
+
+    <div class="schedule-mode-tabs" role="tablist" aria-label="Schedule category">
+      <button type="button" id="scheduleModeCreate" class="schedule-mode-tab active" role="tab" aria-selected="true">CREATE SCHEDULE</button>
+      <button type="button" id="scheduleModeScheduled" class="schedule-mode-tab" role="tab" aria-selected="false">SCHEDULED</button>
+    </div>
+
     <div class="settings-form-grid schedule-select-grid">
       <div class="field"><label for="scheduleWeekOf">Schedule Week / Date</label><input id="scheduleWeekOf" type="date" aria-label="Schedule week date"></div>
-      <div class="field"><label>How to use</label><div class="schedule-date-help">Select a date for the schedule week, then choose an employee in any Site/Day slot. Each employee can only occupy one site per day.</div></div>
+      <div class="field"><label>How to use</label><div class="schedule-date-help">Choose any date. The table automatically shows that Monday through Sunday. New weeks are blank until you assign employees.</div></div>
       <div class="settings-actions"><button type="button" id="saveRosterSchedule" class="small-action">SAVE SCHEDULE</button></div>
     </div>
     <div id="scheduleWeekSummary" class="off-days-summary"></div>
-    <div id="scheduleSavedWeeks" class="off-days-summary schedule-saved-weeks"></div>
+
+    <div id="scheduleCreatePanel" class="schedule-mode-panel">
+      <div class="schedule-create-note"><strong>Create Schedule</strong><span>New weeks start blank. Assign employees in the table, then save.</span></div>
+    </div>
+
+    <div id="scheduleScheduledPanel" class="schedule-mode-panel hidden">
+      <div class="schedule-scheduled-head"><div><strong>Scheduled</strong><span>Saved weekly schedules from Firebase. Select one to view or edit it, then click SAVE SCHEDULE.</span></div><button type="button" id="createAnotherSchedule" class="small-action">+ CREATE NEXT WEEK</button></div>
+      <div id="scheduleSavedWeeks" class="schedule-saved-weeks"></div>
+    </div>
+
     <div class="schedule-board-wrap"><div class="section-kicker">SITE ROSTER</div><p class="muted">Every slot is a dropdown containing all employees. The selected employee becomes valid only for that site's day. Blank slots stay blank.</p><div id="scheduleRoster" class="schedule-roster"></div></div>
   </div>
 </section>

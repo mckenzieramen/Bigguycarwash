@@ -11,6 +11,8 @@ state.scheduleWeekOf=state.scheduleWeekOf||"";
 let enrollStream=null,modelsReady=false;
 // Start the schedule screen as a blank, unsaved draft without deleting any saved Firebase schedule/time data.
 let scheduleBlankDraft=true;
+let scheduleMode='create';
+let scheduleModeInitialized=false;
 let attendanceCaptureDisplayedKey=null;
 let selectedDtrEmployeeId="";
 let attendanceCaptureHideTimer=null;
@@ -349,16 +351,46 @@ function savedScheduleWeeks(){
  });
  return [...keys].sort();
 }
+function nextCreateScheduleWeek(){
+ const weeks=savedScheduleWeeks();
+ if(!weeks.length)return mondayOfWeek(today());
+ return addDaysISO(weeks[weeks.length-1],7);
+}
+function setScheduleMode(mode){
+ scheduleMode=mode==="scheduled"?"scheduled":"create";
+ const createBtn=$("scheduleModeCreate"),scheduledBtn=$("scheduleModeScheduled");
+ createBtn?.classList.toggle("active",scheduleMode==="create");
+ scheduledBtn?.classList.toggle("active",scheduleMode==="scheduled");
+ createBtn?.setAttribute("aria-selected",scheduleMode==="create"?"true":"false");
+ scheduledBtn?.setAttribute("aria-selected",scheduleMode==="scheduled"?"true":"false");
+ $("scheduleCreatePanel")?.classList.toggle("hidden",scheduleMode!=="create");
+ $("scheduleScheduledPanel")?.classList.toggle("hidden",scheduleMode!=="scheduled");
+ if(scheduleMode==="scheduled")renderSavedScheduleWeeks();
+}
+function createNewSchedule(){
+ const week=nextCreateScheduleWeek();
+ if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
+ state.scheduleWeekOf=week;
+ scheduleBlankDraft=true;
+ scheduleModeInitialized=true;
+ setScheduleMode("create");
+ renderScheduleRoster();
+ renderSavedScheduleWeeks();
+}
 function renderSavedScheduleWeeks(){
  const root=$("scheduleSavedWeeks"); if(!root)return;
  const weeks=savedScheduleWeeks();
- if(!weeks.length){root.innerHTML='<span class="muted">No saved schedules yet. Create a week, assign employees, then click SAVE SCHEDULE.</span>';return;}
+ if(!weeks.length){
+   root.innerHTML='<div class="schedule-empty-saved"><strong>No saved schedules yet.</strong><span>Create a schedule, assign employees, then click SAVE SCHEDULE.</span></div>';
+   return;
+ }
  const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
- root.innerHTML='<strong>Saved weeks:</strong> '+weeks.map(w=>`<button type="button" class="saved-week-btn ${w===current?'active':''}" data-week="${w}">${prettyScheduleDate(w)} – ${prettyScheduleDate(addDaysISO(w,6))}</button>`).join('');
+ root.innerHTML='<div class="saved-weeks-heading"><strong>Saved weeks</strong><span>Select a week to view or edit it.</span></div><div class="saved-weeks-list">'+weeks.slice().reverse().map(w=>`<button type="button" class="saved-week-btn ${w===current?'active':''}" data-week="${w}"><span>${prettyScheduleDate(w)} – ${prettyScheduleDate(addDaysISO(w,6))}</span><small>VIEW / EDIT</small></button>`).join('')+'</div>';
  root.querySelectorAll('.saved-week-btn').forEach(btn=>btn.addEventListener('click',()=>{
    if($("scheduleWeekOf"))$("scheduleWeekOf").value=btn.dataset.week;
    state.scheduleWeekOf=btn.dataset.week;
-   scheduleBlankDraft=!hasSavedScheduleForWeek(btn.dataset.week);
+   scheduleBlankDraft=false;
+   setScheduleMode("scheduled");
    renderScheduleRoster();
    renderSavedScheduleWeeks();
  }));
@@ -369,9 +401,14 @@ function renderSchedules(){
  const weekOf=mondayOfWeek(weekInput?.value||state.scheduleWeekOf||today());
  if(weekInput)weekInput.value=weekOf;
  state.scheduleWeekOf=weekOf;
- scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
+ if(!scheduleModeInitialized){
+   scheduleMode=savedScheduleWeeks().length?"scheduled":"create";
+   scheduleModeInitialized=true;
+ }
+ scheduleBlankDraft=scheduleMode==="create"?true:!hasSavedScheduleForWeek(weekOf);
  renderScheduleRoster();
  renderSavedScheduleWeeks();
+ setScheduleMode(scheduleMode);
 }
 async function saveRosterSchedule(){
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||today());
@@ -413,6 +450,7 @@ async function saveRosterSchedule(){
    state.employees=employees;
    state.scheduleWeekOf=weekOf;
    scheduleBlankDraft=false;
+   scheduleMode='scheduled';
    cacheState();
    renderSchedules();renderAttendanceAdmin(attendanceDateValue());renderPayroll();refresh();
    alert(`Schedule saved for the week of ${prettyScheduleDate(weekOf)}.`);
@@ -571,7 +609,9 @@ $("loginBtn").onclick=async()=>{
     BigGuysCloud.init(state,remote=>{
       state=remote;
       cacheState();
+      scheduleModeInitialized=false;
       refresh();
+      cleanupExpiredScheduleWeeks();
     },'admin').catch(err=>{
       console.error('Background Firestore sync failed:',err);
     });
@@ -1090,9 +1130,17 @@ $("scheduleWeekOf")?.addEventListener("change",()=>{
  const weekOf=mondayOfWeek(selected);
  if($("scheduleWeekOf"))$("scheduleWeekOf").value=weekOf;
  state.scheduleWeekOf=weekOf;
- scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
+ scheduleBlankDraft=scheduleMode==="create"?true:!hasSavedScheduleForWeek(weekOf);
  renderScheduleRoster();
  renderSavedScheduleWeeks();
+});
+$("scheduleModeCreate")?.addEventListener("click",createNewSchedule);
+$("createAnotherSchedule")?.addEventListener("click",createNewSchedule);
+$("scheduleModeScheduled")?.addEventListener("click",()=>{
+ setScheduleMode("scheduled");
+ renderSavedScheduleWeeks();
+ scheduleBlankDraft=!hasSavedScheduleForWeek($("scheduleWeekOf")?.value||today());
+ renderScheduleRoster();
 });
 $("saveRosterSchedule")?.addEventListener("click",saveRosterSchedule);
 
@@ -1102,6 +1150,7 @@ if($("attendanceDate"))$("attendanceDate").value=today();
 renderSchedules();
 ensureAutomaticAbsences();
 let salesDayKey=today();setInterval(()=>{const d=today();if(d!==salesDayKey){salesDayKey=d;ensureAutomaticAbsences();if($("salesViewDate"))$("salesViewDate").value=d;if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');}},1000);
+setInterval(()=>{if(!$("dashboard")?.classList.contains("hidden"))cleanupExpiredScheduleWeeks();},86400000);
 $("payrollMonth").value=today().slice(0,7);
 
 function updateAdminClock(){
@@ -1114,6 +1163,21 @@ function updateAdminClock(){
  if($("rightDate"))$("rightDate").textContent=date;
  if($("headerDay"))$("headerDay").textContent=day;
  if($("headerDate"))$("headerDate").textContent=long;
+}
+async function cleanupExpiredScheduleWeeks(){
+ if(!window.BigGuysCloud?.cleanupExpiredSchedules)return;
+ const currentWeek=mondayOfWeek(today());
+ const cutoff=addDaysISO(currentWeek,-28);
+ try{
+   const result=await window.BigGuysCloud.cleanupExpiredSchedules(cutoff);
+   if(result){
+     state=result;
+     cacheState();
+     renderSchedules();
+   }
+ }catch(err){
+   console.warn("Old schedule cleanup skipped:",err);
+ }
 }
 function startClock(){
  clearInterval(window.bigGuysClock);
@@ -1151,7 +1215,7 @@ $("reportPrintBtn")?.addEventListener('click',()=>window.print());$("salesPrintB
 
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;state=remote;cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
-async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
+async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); scheduleModeInitialized=false; if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
 setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));
