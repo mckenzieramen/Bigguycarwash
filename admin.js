@@ -303,40 +303,46 @@ async function saveEmployeeOffDays(){
  }catch(err){console.error("Days off save failed",err);alert(`Unable to save days off: ${err?.code||err?.message||err}`);}
 }
 function renderScheduleRoster(){
- const root=$("scheduleRoster");if(!root)return; const days=WEEKDAYS.slice(1);
+ const root=$("scheduleRoster");if(!root)return;
+ const days=WEEKDAYS.slice(1); // Monday through Sunday
  const dayColors={Monday:"mon",Tuesday:"tue",Wednesday:"wed",Thursday:"thu",Friday:"fri",Saturday:"sat",Sunday:"sun"};
  const siteOrder=["site2","site3","site1"];
- const siteCards=siteOrder.map(siteId=>{
-   const site=DTR_SITES[siteId];
-   const rows=state.employees.map((e,i)=>{
+ const rowLimits={site1:10,site2:5,site3:5,off:5};
+ const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+ const buildRows=(siteId,maxRows)=>{
+   const matches=state.employees.filter(e=>{
      const schedule=scheduleForEmployee(e);
-     const active=days.map(day=>schedule[day]===siteId?e.name:"");
-     if(!active.some(Boolean))return "";
-     return `<div class="site-roster-num">${i+1}</div>${active.map((name,idx)=>`<div class="site-roster-cell ${name?"has-name":"empty"}" data-day="${days[idx]}">${name||""}</div>`).join("")}`;
+     return days.some(day=>siteId==="off"?(schedule[day]==="off"||employeeOffDays(e).includes(day)):schedule[day]===siteId);
+   });
+   const totalRows=Math.max(maxRows,matches.length);
+   return Array.from({length:totalRows},(_,rowIndex)=>{
+     const e=matches[rowIndex];
+     const cells=days.map(day=>{
+       let active=false;
+       if(e){
+         const schedule=scheduleForEmployee(e);
+         active=siteId==="off"?(schedule[day]==="off"||employeeOffDays(e).includes(day)):schedule[day]===siteId;
+       }
+       return `<div class="site-roster-cell ${active?"has-name":"empty"}" data-day="${day}">${active?escapeHtml(e.name):""}</div>`;
+     }).join("");
+     return `<div class="site-roster-num">${rowIndex+1}</div>${cells}`;
    }).join("");
-   return `<div class="site-roster-card">
-     <div class="site-roster-title"><div><strong>${site.name}</strong><small>${site.lat}, ${site.lng}</small></div><span class="site-roster-badge">WEEKLY ROSTER</span></div>
-     <div class="site-roster-scroll"><div class="site-roster-grid">
-       <div class="site-roster-corner">#</div>${days.map(d=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}</div>`).join("")}
-       ${rows || `<div class="site-roster-empty">No employees scheduled at ${site.name}.</div>`}
-     </div></div>
-   </div>`;
- }).join("");
- const offRows=state.employees.map((e,i)=>{
-   const schedule=scheduleForEmployee(e);
-   const active=days.map(day=>schedule[day]==="off"||employeeOffDays(e).includes(day)?e.name:"");
-   if(!active.some(Boolean))return "";
-   return `<div class="site-roster-num">${i+1}</div>${active.map((name,idx)=>`<div class="site-roster-cell ${name?"has-name":"empty"}" data-day="${days[idx]}">${name||""}</div>`).join("")}`;
- }).join("");
- const dayoffCard=`<div class="site-roster-card dayoff-roster-card">
-   <div class="site-roster-title"><div><strong>Day Off</strong><small>Employees marked OFF / not scheduled</small></div><span class="site-roster-badge">OFF</span></div>
+ };
+ const makeCard=(siteId,title,subtitle,badge,maxRows)=>`<div class="site-roster-card ${siteId==="off"?"dayoff-roster-card":""}">
+   <div class="site-roster-title"><div><strong>${title}</strong><small>${subtitle}</small></div><span class="site-roster-badge">${badge}</span></div>
    <div class="site-roster-scroll"><div class="site-roster-grid">
      <div class="site-roster-corner">#</div>${days.map(d=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}</div>`).join("")}
-     ${offRows || `<div class="site-roster-empty">No day-off assignments.</div>`}
+     ${buildRows(siteId,maxRows)}
    </div></div>
  </div>`;
+ const siteCards=siteOrder.map(siteId=>{
+   const site=DTR_SITES[siteId];
+   return makeCard(siteId,site.name,`${site.lat}, ${site.lng}`,"WEEKLY ROSTER",rowLimits[siteId]);
+ }).join("");
+ const dayoffCard=makeCard("off","Day Off","Employees marked OFF / not scheduled","OFF",rowLimits.off);
  root.innerHTML=siteCards+dayoffCard;
 }
+
 function scrollContainerKey(el,i=0){
  const host=el.closest('[id]');
  if(el.dataset.scrollKey)return el.dataset.scrollKey;
