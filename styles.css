@@ -194,3 +194,20 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
   .income-card .legend{gap:7px;font-size:12px;padding:0 2px 2px;}
   .income-card .legend span{min-height:22px;}
 }
+
+
+/* V59 — mobile navigation stays fixed and Income Breakdown donut hole stays centered. */
+.donut{position:relative;}
+@media(max-width:950px){
+  .mobile-menu{position:fixed!important;top:12px;left:10px;z-index:100;display:grid!important;place-items:center;width:48px;height:48px;padding:0;margin:0;border-radius:14px;background:#071827;border:1px solid #214663;color:#eaf4ff;font-size:0;box-shadow:0 10px 30px #0009;}
+  .mobile-menu:before{content:'☰';font-size:27px;line-height:1;}
+  .dashboard-header{padding-left:64px!important;}
+}
+@media(max-width:600px){
+  .income-card .donut-wrap{height:178px;min-height:178px;padding:4px 0 2px;display:grid;place-items:center;}
+  .income-card .donut{width:138px;height:138px;margin:0;position:relative;place-self:center;}
+  .income-card .donut:before{width:88px;height:88px;left:50%;top:50%;transform:translate(-50%,-50%);position:absolute;}
+}
+@media(max-width:600px){
+  #attendanceTable .table{min-width:1120px;}
+}

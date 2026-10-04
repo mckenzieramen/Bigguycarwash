@@ -164,10 +164,34 @@ function renderAttendanceAdmin(date){
    let action="—";
    if(off && !a) status="off";
    else if(!a) action=`<button type="button" class="small-action mark-absent" data-id="${e.id}" data-date="${target}">MARK ABSENT</button>`;
-   return [e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(status),money(sales),`${Math.round(rate*100)}%`,money(commissionFor(e,target)),money(pay(e,target)),action];
+   const currentBase=baseRate(e);
+   const basicEditor=`<div class="base-pay-editor"><input class="attendance-base-pay" type="number" min="0" step="0.01" inputmode="decimal" value="${currentBase}" data-id="${e.id}" aria-label="Basic pay per day for ${e.name}"><button type="button" class="save-base-pay" data-id="${e.id}">SAVE</button></div>`;
+   return [e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(status),money(sales),`${Math.round(rate*100)}%`,money(commissionFor(e,target)),basicEditor,money(pay(e,target)),action];
  });
- $("attendanceTable").innerHTML=table(rows,["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission","Daily Pay","Action"]);
+ $("attendanceTable").innerHTML=table(rows,["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission","Basic Pay / Day","Daily Pay","Action"]);
  document.querySelectorAll(".mark-absent").forEach(btn=>btn.onclick=()=>markEmployeeAbsent(btn.dataset.id,btn.dataset.date));
+ document.querySelectorAll(".save-base-pay").forEach(btn=>btn.onclick=()=>saveAttendanceBasePay(btn.dataset.id));
+}
+async function saveAttendanceBasePay(employeeId){
+ const employee=state.employees.find(x=>String(x.id)===String(employeeId));
+ const input=document.querySelector(`.attendance-base-pay[data-id="${CSS.escape(String(employeeId))}"]`);
+ if(!employee||!input)return;
+ const value=Number(input.value);
+ if(!Number.isFinite(value)||value<0){alert("Please enter a valid Basic Pay / Day amount.");return;}
+ const button=document.querySelector(`.save-base-pay[data-id="${CSS.escape(String(employeeId))}"]`);
+ if(button){button.disabled=true;button.textContent="SAVING…";}
+ try{
+   const updated={...employee,basePay:value};
+   if(window.BigGuysCloud?.saveEmployee) state=await window.BigGuysCloud.saveEmployee(updated);
+   else {Object.assign(employee,{basePay:value});state=await save();}
+   cacheState();
+   refresh();
+   renderAttendanceAdmin(attendanceDateValue());
+ }catch(err){
+   console.error("Basic pay save failed",err);
+   alert(`Unable to save Basic Pay / Day: ${err?.code||err?.message||err}`);
+   if(button){button.disabled=false;button.textContent="SAVE";}
+ }
 }
 async function markEmployeeAbsent(employeeId,date){
  const e=state.employees.find(x=>String(x.id)===String(employeeId));
@@ -267,9 +291,6 @@ async function loadModels(){
 }
 if($("empHireDate")){
  $("empHireDate").value=today();
- $("empBasePay").addEventListener("input",()=>{const el=$("empBasePay");if(el)el.dataset.manuallyEdited="1";});
- $("empType").addEventListener("change",()=>{const el=$("empBasePay");if(el&&!el.dataset.manuallyEdited)el.value=defaultBaseRate($("empType").value);});
-$("empBasePay").addEventListener("input",()=>{$("empBasePay").dataset.manuallyEdited="1";});
 $("empHireDate").addEventListener("change",updateEmployeeIdPreview);
  updateEmployeeIdPreview();
 }
@@ -316,7 +337,7 @@ $("employeeForm").onsubmit=async e=>{
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
-   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,basePay:Math.max(0,Number($("empBasePay").value||defaultBaseRate($("empType").value))),start:$("empStart").value,hireDate,offDays:[]};
+   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,offDays:[]};
    state.employees.push(employee);
    cacheState();
    if(window.BigGuysCloud?.saveEmployee){
@@ -326,8 +347,6 @@ $("employeeForm").onsubmit=async e=>{
      await syncAdminNow();
    }
    e.target.reset();
-   $("empBasePay").dataset.manuallyEdited="";
-   $("empBasePay").value=defaultBaseRate($("empType").value);
    $("empStart").value='08:00';
    $("empHireDate").value=today();
    updateEmployeeIdPreview();
@@ -783,7 +802,6 @@ if($("attendanceDate"))$("attendanceDate").value=today();
 renderSettings();
 let salesDayKey=today();setInterval(()=>{const d=today();if(d!==salesDayKey){salesDayKey=d;if($("salesViewDate"))$("salesViewDate").value=d;if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');}},1000);
 $("payrollMonth").value=today().slice(0,7);
-if($("empBasePay"))$("empBasePay").value=defaultBaseRate($("empType")?.value||"full");
 
 function startClock(){
  const tick=()=>{const n=new Date();const time=n.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit",second:"2-digit"});const date=n.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric",year:"numeric"});const day=n.toLocaleDateString("en-PH",{weekday:"long"});const long=n.toLocaleDateString("en-PH",{month:"long",day:"numeric",year:"numeric"});if($("digitalClock"))$("digitalClock").textContent=time;if($("rightDate"))$("rightDate").textContent=date;if($("headerDay"))$("headerDay").textContent=day;if($("headerDate"))$("headerDate").textContent=long};tick();clearInterval(window.bigGuysClock);window.bigGuysClock=setInterval(tick,1000);
