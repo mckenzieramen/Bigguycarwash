@@ -9,14 +9,18 @@ state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?s
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 state.scheduleWeekOf=state.scheduleWeekOf||"";
 state.scheduleDrafts=state.scheduleDrafts&&typeof state.scheduleDrafts==="object"?state.scheduleDrafts:{};
-let scheduleEditingWeek="";
 const SCHEDULE_DRAFT_SESSION_KEY="bigguys_schedule_create_drafts_v2";
+const SCHEDULE_UI_STATE_KEY="bigguys_schedule_ui_state_v1";
 try{const cachedDrafts=JSON.parse(sessionStorage.getItem(SCHEDULE_DRAFT_SESSION_KEY)||"{}");if(cachedDrafts&&typeof cachedDrafts==="object")state.scheduleDrafts={...state.scheduleDrafts,...cachedDrafts};}catch(e){}
 let enrollStream=null,modelsReady=false;
 // Start the schedule screen as a blank, unsaved draft without deleting any saved Firebase schedule/time data.
 let scheduleBlankDraft=true;
 let scheduleMode='create';
 let scheduleModeInitialized=false;
+let scheduleEditingWeek="";
+let scheduleDraftActive=false;
+let scheduleDraftWeek="";
+let scheduleUiStateLoaded=false;
 let attendanceCaptureDisplayedKey=null;
 let selectedDtrEmployeeId="";
 let attendanceCaptureHideTimer=null;
@@ -57,6 +61,8 @@ function syncStateFromStorage(){
    if(raw.faces&&typeof raw.faces==="object"&&Object.keys(raw.faces).length)state.faces=raw.faces;
    if(raw.faceUpdatedAt&&typeof raw.faceUpdatedAt==="object"&&Object.keys(raw.faceUpdatedAt).length)state.faceUpdatedAt=raw.faceUpdatedAt;
    state.dailyReports=raw.dailyReports&&typeof raw.dailyReports==="object"?raw.dailyReports:{};
+   state.scheduleDrafts=raw.scheduleDrafts&&typeof raw.scheduleDrafts==="object"?raw.scheduleDrafts:loadScheduleDrafts();
+   if(raw.scheduleWeekOf)state.scheduleWeekOf=raw.scheduleWeekOf;
  }catch(e){console.warn("Could not sync dashboard data",e)}
 }
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
@@ -340,6 +346,35 @@ function syncRosterDuplicateDay(changed){
  }
  refreshRosterDayAvailability(day);
 }
+function loadScheduleUiState(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(SCHEDULE_UI_STATE_KEY)||"{}");
+    if(!raw||typeof raw!=="object")return null;
+    return {
+      mode:raw.mode==="scheduled"?"scheduled":"create",
+      week:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.week||""))?mondayOfWeek(raw.week):"",
+      editingWeek:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.editingWeek||""))?mondayOfWeek(raw.editingWeek):""
+    };
+  }catch(err){return null;}
+}
+function persistScheduleUiState(){
+  try{
+    const week=mondayOfWeek($("scheduleWeekOf")?.value||state.scheduleWeekOf||today());
+    localStorage.setItem(SCHEDULE_UI_STATE_KEY,JSON.stringify({mode:scheduleMode,week,editingWeek:scheduleEditingWeek||"",draftActive:scheduleDraftActive===true,draftWeek:scheduleDraftWeek||""}));
+  }catch(err){console.warn("Schedule UI state local save skipped:",err);}
+}
+function restoreScheduleUiState(){
+  if(scheduleUiStateLoaded)return;
+  const saved=loadScheduleUiState();
+  if(saved){
+    scheduleMode=saved.mode;
+    scheduleEditingWeek=saved.editingWeek||"";
+    scheduleDraftActive=saved.draftActive===true;
+    scheduleDraftWeek=saved.draftWeek||"";
+    if(saved.week){state.scheduleWeekOf=saved.week;if($("scheduleWeekOf"))$("scheduleWeekOf").value=saved.week;}
+  }
+  scheduleUiStateLoaded=true;
+}
 function persistScheduleDrafts(){
   try{
     state.scheduleDrafts=state.scheduleDrafts&&typeof state.scheduleDrafts==="object"?state.scheduleDrafts:{};
@@ -397,6 +432,7 @@ function clearScheduleDraft(weekOf){
  const key=mondayOfWeek(weekOf||today());
  if(state.scheduleDrafts&&Object.prototype.hasOwnProperty.call(state.scheduleDrafts,key)){
    delete state.scheduleDrafts[key];
+   if(scheduleDraftWeek===key){scheduleDraftActive=false;scheduleDraftWeek="";persistScheduleUiState();}
    persistScheduleDrafts();
    cacheState();
  }
@@ -423,6 +459,7 @@ function nextCreateScheduleWeek(){
 }
 function setScheduleMode(mode){
  scheduleMode=mode==="scheduled"?"scheduled":"create";
+ persistScheduleUiState();
  const createBtn=$("scheduleModeCreate"),scheduledBtn=$("scheduleModeScheduled");
  createBtn?.classList.toggle("active",scheduleMode==="create");
  scheduledBtn?.classList.toggle("active",scheduleMode==="scheduled");
@@ -438,6 +475,9 @@ function createNewSchedule(){
  const week=nextCreateScheduleWeek();
  if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
  state.scheduleWeekOf=week;
+ scheduleDraftActive=true;
+ scheduleDraftWeek=week;
+ if(!scheduleDraftForWeek(week)){state.scheduleDrafts=state.scheduleDrafts||{};state.scheduleDrafts[week]={};persistScheduleDrafts();}
  scheduleBlankDraft=!scheduleDraftForWeek(week);
  scheduleModeInitialized=true;
  setScheduleMode("create");
@@ -465,6 +505,7 @@ function renderSavedScheduleWeeks(){
    renderScheduleRoster();
    renderSavedScheduleWeeks();
    const saveBtn=$("saveRosterSchedule"); if(saveBtn)saveBtn.textContent="UPDATE SCHEDULE";
+   persistScheduleUiState();
  }));
  root.querySelectorAll('.saved-week-delete').forEach(btn=>btn.addEventListener('click',async()=>{
    const week=btn.dataset.deleteWeek;
@@ -488,6 +529,7 @@ function renderSavedScheduleWeeks(){
        setScheduleMode("scheduled");
      }
      cacheState();
+     persistScheduleUiState();
      renderSchedules();
      alert(`Schedule deleted for the week of ${prettyScheduleDate(week)}.`);
    }catch(err){console.error("Schedule delete failed",err);alert(`Unable to delete schedule: ${err?.code||err?.message||err}`);}
@@ -495,15 +537,19 @@ function renderSavedScheduleWeeks(){
 }
 
 function renderSchedules(){
+ restoreScheduleUiState();
  const weekInput=$("scheduleWeekOf");
  if(weekInput && !weekInput.value)weekInput.value=state.scheduleWeekOf||today();
  const weekOf=mondayOfWeek(weekInput?.value||state.scheduleWeekOf||today());
  if(weekInput)weekInput.value=weekOf;
  state.scheduleWeekOf=weekOf;
  if(!scheduleModeInitialized){
-   scheduleMode=savedScheduleWeeks().length?"scheduled":"create";
+   const savedWeeks=savedScheduleWeeks();
+   if(scheduleMode==="scheduled" && (!savedWeeks.length || !hasSavedScheduleForWeek(weekOf))){
+     scheduleMode=savedWeeks.length?"scheduled":"create";
+     if(scheduleMode==="scheduled")scheduleEditingWeek="";
+   }
    scheduleModeInitialized=true;
-   if(scheduleMode==="scheduled")scheduleEditingWeek="";
  }
  if(scheduleMode==="create")scheduleBlankDraft=!scheduleDraftForWeek(weekOf);
  else scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
@@ -513,6 +559,7 @@ function renderSchedules(){
  const canEdit=scheduleMode==="create" || (scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf&&hasSavedScheduleForWeek(weekOf));
  if(saveBtn){saveBtn.textContent=scheduleMode==="scheduled"?"UPDATE SCHEDULE":"SAVE SCHEDULE";saveBtn.disabled=!canEdit;}
  renderScheduleRoster();
+ persistScheduleUiState();
 }
 
 async function saveRosterSchedule(){
@@ -548,18 +595,27 @@ async function saveRosterSchedule(){
      weeklySchedules[weekOf]=next;
      return {...e,weeklySchedules};
    });
-   for(const employee of employees){
-     const original=state.employees.find(x=>String(x.id)===String(employee.id));
-     if(JSON.stringify(original?.weeklySchedules||{})!==JSON.stringify(employee.weeklySchedules||{})){
-       if(window.BigGuysCloud?.saveEmployee) await window.BigGuysCloud.saveEmployee(employee);
+   if(window.BigGuysCloud?.saveScheduleWeek){
+     const scheduleMap={};
+     employees.forEach(employee=>{scheduleMap[String(employee.id)]=employee.weeklySchedules?.[weekOf]||{};});
+     const fresh=await window.BigGuysCloud.saveScheduleWeek(weekOf,scheduleMap);
+     if(fresh?.employees) state.employees=fresh.employees;
+     else state.employees=employees;
+   }else{
+     for(const employee of employees){
+       const original=state.employees.find(x=>String(x.id)===String(employee.id));
+       if(JSON.stringify(original?.weeklySchedules||{})!==JSON.stringify(employee.weeklySchedules||{})){
+         if(window.BigGuysCloud?.saveEmployee) await window.BigGuysCloud.saveEmployee(employee);
+       }
      }
+     state.employees=employees;
    }
-   state.employees=employees;
    state.scheduleWeekOf=weekOf;
    clearScheduleDraft(weekOf);
    scheduleEditingWeek="";
    scheduleBlankDraft=false;
    scheduleMode='scheduled';
+   persistScheduleUiState();
    cacheState();
    renderSchedules();renderAttendanceAdmin(attendanceDateValue());renderPayroll();refresh();
    alert(`Schedule saved for the week of ${prettyScheduleDate(weekOf)}.`);
@@ -574,10 +630,15 @@ function renderScheduleRoster(){
  const siteOrder=["site1","site2","site3","off"];
  const rowLimits={site1:10,site2:5,site3:5,off:5};
  const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
- const draft=draftAssignmentsForWeek(weekOf);
+ const draft=(scheduleMode==="create" && scheduleDraftActive && scheduleDraftWeek===weekOf)?draftAssignmentsForWeek(weekOf):null;
  const viewingSavedWeek=scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf&&hasSavedScheduleForWeek(weekOf);
  const showRoster=scheduleMode!=="scheduled"||viewingSavedWeek;
  const employeeAt=(siteId,day,rowIndex)=>{
+   if(scheduleMode==="create") {
+     if(!draft) return "";
+     const matches=state.employees.filter(e=>draft[String(e.id)]?.[day]===siteId);
+     return matches[rowIndex]?.id||"";
+   }
    if(draft){
      const matches=state.employees.filter(e=>draft[String(e.id)]?.[day]===siteId);
      return matches[rowIndex]?.id||"";
@@ -1262,6 +1323,7 @@ $("scheduleWeekOf")?.addEventListener("change",()=>{
    scheduleBlankDraft=!scheduleDraftForWeek(weekOf);
  }
  renderSchedules();
+ persistScheduleUiState();
 });
 $("scheduleModeCreate")?.addEventListener("click",createNewSchedule);
 $("createAnotherSchedule")?.addEventListener("click",createNewSchedule);
@@ -1346,8 +1408,8 @@ $("reportExportBtn")?.addEventListener('click',()=>exportCurrentTable('report'))
 $("reportPrintBtn")?.addEventListener('click',()=>window.print());$("salesPrintBtn")?.addEventListener('click',()=>window.print());
 
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
-window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;const localDrafts=preserveScheduleDrafts();state=remote;state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts};persistScheduleDrafts();cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
-async function initCloud(){ state.scheduleDrafts={...loadScheduleDrafts(),...(state.scheduleDrafts||{})}; if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ const localDrafts=preserveScheduleDrafts(); state=remote; state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts}; persistScheduleDrafts(); cacheState(); scheduleModeInitialized=false; if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
+window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;restoreScheduleUiState();const localDrafts=preserveScheduleDrafts();state=remote;state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts};persistScheduleDrafts();cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
+async function initCloud(){ restoreScheduleUiState(); state.scheduleDrafts={...loadScheduleDrafts(),...(state.scheduleDrafts||{})}; if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ restoreScheduleUiState(); const localDrafts=preserveScheduleDrafts(); state=remote; state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts}; persistScheduleDrafts(); cacheState(); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
 setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));

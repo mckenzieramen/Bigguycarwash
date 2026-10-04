@@ -136,6 +136,22 @@
     return readCloud();
   }
   async function saveEmployee(employee){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!employee?.id)throw new Error('invalid-argument: employee ID is missing.');await db.doc(`${C.employees}/${employee.id}`).set({...employee,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
+  async function saveScheduleWeek(weekKey,scheduleMap){
+    await initFirebase();
+    if(!isAdmin())throw new Error('Admin authentication required.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(weekKey||'')))throw new Error('invalid-argument: week key is required.');
+    const employees=await getAll(C.employees);
+    const batch=db.batch();
+    employees.forEach(e=>{
+      if(!e?.id)return;
+      const weekly=e.weeklySchedules&&typeof e.weeklySchedules==='object'?{...e.weeklySchedules}:{};
+      const incoming=scheduleMap?.[String(e.id)]&&typeof scheduleMap[String(e.id)]==='object'?scheduleMap[String(e.id)]:{};
+      weekly[String(weekKey)]={Monday:incoming.Monday||'',Tuesday:incoming.Tuesday||'',Wednesday:incoming.Wednesday||'',Thursday:incoming.Thursday||'',Friday:incoming.Friday||'',Saturday:incoming.Saturday||'',Sunday:incoming.Sunday||''};
+      batch.set(db.doc(`${C.employees}/${e.id}`),{weeklySchedules:weekly,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    });
+    await batch.commit();
+    return readCloud();
+  }
   async function deleteScheduleWeek(weekKey){
     await initFirebase();
     if(!isAdmin())throw new Error('Admin authentication required.');
@@ -253,5 +269,5 @@
   async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;}
   async function getAdminProfilePublic(){return getAdminProfile();}
   async function refreshCloud(){await initFirebase();await ensureAuth(isAdmin()?'admin':'dtr');const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return next;}
-  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,refresh:refreshCloud,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,cleanupExpiredSchedules,deleteScheduleWeek,deleteEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
+  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,refresh:refreshCloud,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,saveScheduleWeek,cleanupExpiredSchedules,deleteScheduleWeek,deleteEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
 })();
