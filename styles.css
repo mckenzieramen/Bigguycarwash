@@ -149,18 +149,20 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
   .income-card .donut-wrap{min-height:230px;display:grid;place-items:center;overflow:visible}.income-card .donut{margin:auto;width:170px;height:170px}
 }
 
-/* V52 LOCKED BASELINE + MOBILE HORIZONTAL DASHBOARD SCROLL */
-@media(max-width:950px){
-  /* Keep the mobile navigation/header usable while allowing the dashboard itself to be viewed horizontally. */
-  .admin-main{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;}
-  .dashboard-layout{display:grid;grid-template-columns:minmax(780px,1fr) 365px;min-width:1160px;width:max-content;max-width:none;gap:10px;}
-  .dashboard-center{min-width:780px;width:780px;}
-  .dashboard-right{display:none!important;}
-  .dashboard-header{min-width:0;width:100%;}
-  .dashboard-header .mobile-menu{position:sticky;left:0;flex:none;}
-  .kpi-grid{grid-template-columns:repeat(4,minmax(180px,1fr));}
-  .chart-grid{grid-template-columns:1.05fr 1.05fr .9fr;}
-  .summary-grid{grid-template-columns:.9fr .9fr 1.2fr;}
-  .attendance-card{min-width:0;}
-  .table{min-width:760px;}
+/* V56 — targeted mobile horizontal scrolling for dense employee/DTR/payroll tables only. */
+.mobile-table-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:thin;border-radius:10px;}
+.mobile-table-scroll .table{min-width:760px;}
+.mobile-table-scroll::-webkit-scrollbar{height:6px;}
+.mobile-table-scroll::-webkit-scrollbar-thumb{background:#23415a;border-radius:20px;}
+.base-pay-editor{display:flex;align-items:center;gap:6px;min-width:145px;}
+.base-pay-editor input{width:92px;padding:8px 9px;font-size:12px;}
+.save-base-pay{padding:8px 9px;font-size:10px;white-space:nowrap;}
+@media(max-width:600px){
+  .mobile-table-scroll{margin-right:0;}
+  .mobile-table-scroll .table{min-width:760px;}
+  #overviewAttendance .table{min-width:900px;}
+  #attendanceTable .table{min-width:980px;}
+  #employeeTable .table{min-width:860px;}
+  #payrollTable .table{min-width:780px;}
+  #payrollDailyTable .table{min-width:800px;}
 }

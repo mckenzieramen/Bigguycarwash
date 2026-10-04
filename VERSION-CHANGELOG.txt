@@ -133,5 +133,3 @@ V47 — 2026-09-30
 - Automatic daily report snapshots now save sales, expenses, expected remittance, remitted amount, and over/short variance.
 - Reports remain read-only and now show Short and Over metrics and detailed remittance reconciliation.
 - Preserved existing Firebase, face recognition, DTR, payroll, sales, navigation, and branding logic outside the requested changes.
-
-V55 correction - Employment Type restored as fixed selector (Full/Semi/Part) while Base Pay / Day remains manually adjustable. Payroll formula now uses the employee's saved manual dailyRate when calculating the minimum-pay floor; commission formula remains unchanged.
