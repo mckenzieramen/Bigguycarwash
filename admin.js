@@ -279,12 +279,49 @@ function scheduleRosterAssignments(){
  });
  return out;
 }
-function syncRosterDuplicateDay(changed){
- const day=changed?.dataset?.rosterDay, id=changed?.value;
- if(!day||!id)return;
- document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`).forEach(sel=>{
-   if(sel!==changed&&sel.value===id)sel.value="";
+function refreshRosterDayAvailability(day){
+ const selects=[...document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`)];
+ const used=new Set();
+ selects.forEach(sel=>{
+   const id=String(sel.value||"");
+   if(id)used.add(id);
  });
+ selects.forEach(sel=>{
+   const current=String(sel.value||"");
+   [...sel.options].forEach(opt=>{
+     const id=String(opt.value||"");
+     opt.disabled=!!id && id!==current && used.has(id);
+   });
+ });
+}
+function normalizeRosterDuplicates(){
+ const days=WEEKDAYS.slice(1);
+ days.forEach(day=>{
+   const seen=new Set();
+   document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`).forEach(sel=>{
+     const id=String(sel.value||"");
+     if(!id)return;
+     if(seen.has(id)){
+       sel.value="";
+     }else{
+       seen.add(id);
+     }
+   });
+   refreshRosterDayAvailability(day);
+ });
+}
+function syncRosterDuplicateDay(changed){
+ const day=changed?.dataset?.rosterDay;
+ if(!day)return;
+ const id=String(changed.value||"");
+ if(id){
+   const duplicate=[...document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`)].some(sel=>sel!==changed&&String(sel.value||"")===id);
+   if(duplicate){
+     changed.value="";
+     alert("This employee is already scheduled on this day. One employee can only have one site or Day Off per day.");
+   }
+ }
+ refreshRosterDayAvailability(day);
 }
 function renderSchedules(){
  const weekInput=$("scheduleWeekOf");
@@ -371,6 +408,7 @@ function renderScheduleRoster(){
    return makeCard(siteId,site?site.name:"Day Off",site?`${site.lat}, ${site.lng}`:"Employees not scheduled / OFF",site?"WEEKLY ROSTER":"OFF",rowLimits[siteId]);
  }).join("");
  root.querySelectorAll('.site-roster-select').forEach(sel=>sel.addEventListener('change',()=>syncRosterDuplicateDay(sel)));
+ normalizeRosterDuplicates();
  const summary=$("scheduleWeekSummary");
  if(summary)summary.innerHTML=`<strong>Schedule week:</strong><span>${prettyScheduleDate(weekOf)} – ${prettyScheduleDate(addDaysISO(weekOf,6))}</span>`;
 }
