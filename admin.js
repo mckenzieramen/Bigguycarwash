@@ -61,20 +61,25 @@ const DTR_SITES={
 };
 function siteLabel(id){return DTR_SITES[id]?.name||"Unassigned";}
 const SCHEDULE_SITE_OPTIONS=["site1","site2","site3","off"];
-function scheduleForEmployee(e){
- const existing=e?.weeklySchedule&&typeof e.weeklySchedule==="object"?e.weeklySchedule:{};
- const fallback=e?.siteId||"site1"; const out={};
- WEEKDAYS.slice(1).forEach(day=>{out[day]=SCHEDULE_SITE_OPTIONS.includes(existing[day])?existing[day]:fallback;});
+function scheduleForEmployee(e,dateOrWeek=today(),useLegacy=true){
+ const raw=String(dateOrWeek||today());
+ const weekKey=/^\d{4}-\d{2}-\d{2}$/.test(raw)?mondayOfWeek(raw):raw;
+ const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?e.weeklySchedules:{};
+ const hasSavedWeek=Object.prototype.hasOwnProperty.call(weekly,weekKey)&&weekly[weekKey]&&typeof weekly[weekKey]==="object";
+ const legacy=e?.weeklySchedule&&typeof e.weeklySchedule==="object"?e.weeklySchedule:{};
+ const existing=hasSavedWeek?weekly[weekKey]:(useLegacy?legacy:{});
+ const out={};
+ WEEKDAYS.slice(1).forEach(day=>{out[day]=SCHEDULE_SITE_OPTIONS.includes(existing[day])?existing[day]:"off";});
  return out;
 }
 function scheduledSiteId(e,date=today()){
  if(!e)return ""; const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];
- const value=scheduleForEmployee(e)[day]; return value==="off"?"":(DTR_SITES[value]?value:(e.siteId||""));
+ const value=scheduleForEmployee(e,date,true)[day]; return value==="off"?"":(DTR_SITES[value]?value:(e.siteId||""));
 }
 function scheduledSiteName(e,date=today()){return siteLabel(scheduledSiteId(e,date));}
 
 function employeeOffDays(e){return Array.isArray(e?.offDays)?e.offDays:[];}
-function isEmployeeOff(e,date){if(!e||!date)return false;const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];return employeeOffDays(e).includes(day)||scheduleForEmployee(e)[day]==="off";}
+function isEmployeeOff(e,date){if(!e||!date)return false;const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];return scheduleForEmployee(e,date,true)[day]==="off";}
 function isBeforeHire(e,date){return !!(e?.hireDate&&date<e.hireDate);}
 function previousDate(date){const d=new Date(date+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 function previousDayPenaltyApplies(emp,date){
@@ -352,15 +357,15 @@ async function saveRosterSchedule(){
      });
    });
    const employees=state.employees.map(e=>{
-     const next={...scheduleForEmployee(e)};
-     WEEKDAYS.slice(1).forEach(day=>{
-       next[day]=selectedByDay[day][String(e.id)]||"off";
-     });
-     return {...e,weeklySchedule:next,offDays:WEEKDAYS.slice(1).filter(d=>next[d]==="off")};
+     const weeklySchedules=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
+     const next={Monday:"off",Tuesday:"off",Wednesday:"off",Thursday:"off",Friday:"off",Saturday:"off",Sunday:"off"};
+     WEEKDAYS.slice(1).forEach(day=>{next[day]=selectedByDay[day][String(e.id)]||"off";});
+     weeklySchedules[weekOf]=next;
+     return {...e,weeklySchedules};
    });
    for(const employee of employees){
      const original=state.employees.find(x=>String(x.id)===String(employee.id));
-     if(JSON.stringify(original?.weeklySchedule||{})!==JSON.stringify(employee.weeklySchedule||{}) || JSON.stringify(original?.offDays||[])!==JSON.stringify(employee.offDays||[])){
+     if(JSON.stringify(original?.weeklySchedules||{})!==JSON.stringify(employee.weeklySchedules||{})){
        if(window.BigGuysCloud?.saveEmployee) await window.BigGuysCloud.saveEmployee(employee);
      }
    }
@@ -382,8 +387,9 @@ function renderScheduleRoster(){
  const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
  const employeeAt=(siteId,day,rowIndex)=>{
    const matches=state.employees.filter(e=>{
-     const schedule=scheduleForEmployee(e);
-     return siteId==="off"?(schedule[day]==="off"||employeeOffDays(e).includes(day)):schedule[day]===siteId;
+     const useLegacy=weekOf===state.scheduleWeekOf;
+     const schedule=scheduleForEmployee(e,weekOf,useLegacy);
+     return siteId==="off"?schedule[day]==="off":schedule[day]===siteId;
    });
    return matches[rowIndex]?.id||"";
  };
