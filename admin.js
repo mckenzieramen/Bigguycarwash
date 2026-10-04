@@ -80,12 +80,11 @@ function updateEmployeeIdPreview(){
  const input=$("empId");
  if(input)input.value=date?nextEmployeeId(date):"";
 }
-const defaultBaseRate=t=>t==="full"?250:t==="semi"?200:150;
-function baseRate(emp){const v=Number(emp?.basePay);return Number.isFinite(v)&&v>=0?v:defaultBaseRate(emp?.type);}
+const baseRate=t=>t==="full"?250:t==="semi"?200:150;
 const commRate=s=>{const v=String(s||"awol").toLowerCase().replace(/[\s_-]+/g,"");if(v==="late")return .35;if(v==="awol"||v==="absent")return .30;return .40;};
 function table(rows,heads){if(!rows.length)return'<p class="muted">No records yet.</p>';return`<table class="table"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
 function isWorkedAttendance(a){return !!(a&&a.clockIn&&a.status&&!["absent","awol","off"].includes(String(a.status).toLowerCase()));}
-function pay(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;const sales=state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);return Math.max(baseRate(emp),sales*commRate(a.status))}
+function pay(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;const sales=state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);return Math.max(baseRate(emp.type),sales*commRate(a.status))}
 function commissionFor(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;return state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0)*commRate(a.status),0)}
 function statusBadge(status){
  const s=(status||"AWOL").toLowerCase();
@@ -164,34 +163,10 @@ function renderAttendanceAdmin(date){
    let action="—";
    if(off && !a) status="off";
    else if(!a) action=`<button type="button" class="small-action mark-absent" data-id="${e.id}" data-date="${target}">MARK ABSENT</button>`;
-   const currentBase=baseRate(e);
-   const basicEditor=`<div class="base-pay-editor"><input class="attendance-base-pay" type="number" min="0" step="0.01" inputmode="decimal" value="${currentBase}" data-id="${e.id}" aria-label="Basic pay per day for ${e.name}"><button type="button" class="save-base-pay" data-id="${e.id}">SAVE</button></div>`;
-   return [e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(status),money(sales),`${Math.round(rate*100)}%`,money(commissionFor(e,target)),basicEditor,money(pay(e,target)),action];
+   return [e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(status),money(sales),`${Math.round(rate*100)}%`,money(commissionFor(e,target)),money(pay(e,target)),action];
  });
- $("attendanceTable").innerHTML=table(rows,["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission","Basic Pay / Day","Daily Pay","Action"]);
+ $("attendanceTable").innerHTML=table(rows,["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission","Daily Pay","Action"]);
  document.querySelectorAll(".mark-absent").forEach(btn=>btn.onclick=()=>markEmployeeAbsent(btn.dataset.id,btn.dataset.date));
- document.querySelectorAll(".save-base-pay").forEach(btn=>btn.onclick=()=>saveAttendanceBasePay(btn.dataset.id));
-}
-async function saveAttendanceBasePay(employeeId){
- const employee=state.employees.find(x=>String(x.id)===String(employeeId));
- const input=document.querySelector(`.attendance-base-pay[data-id="${CSS.escape(String(employeeId))}"]`);
- if(!employee||!input)return;
- const value=Number(input.value);
- if(!Number.isFinite(value)||value<0){alert("Please enter a valid Basic Pay / Day amount.");return;}
- const button=document.querySelector(`.save-base-pay[data-id="${CSS.escape(String(employeeId))}"]`);
- if(button){button.disabled=true;button.textContent="SAVING…";}
- try{
-   const updated={...employee,basePay:value};
-   if(window.BigGuysCloud?.saveEmployee) state=await window.BigGuysCloud.saveEmployee(updated);
-   else {Object.assign(employee,{basePay:value});state=await save();}
-   cacheState();
-   refresh();
-   renderAttendanceAdmin(attendanceDateValue());
- }catch(err){
-   console.error("Basic pay save failed",err);
-   alert(`Unable to save Basic Pay / Day: ${err?.code||err?.message||err}`);
-   if(button){button.disabled=false;button.textContent="SAVE";}
- }
 }
 async function markEmployeeAbsent(employeeId,date){
  const e=state.employees.find(x=>String(x.id)===String(employeeId));
@@ -252,7 +227,7 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*commRate(a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
@@ -291,7 +266,7 @@ async function loadModels(){
 }
 if($("empHireDate")){
  $("empHireDate").value=today();
-$("empHireDate").addEventListener("change",updateEmployeeIdPreview);
+ $("empHireDate").addEventListener("change",updateEmployeeIdPreview);
  updateEmployeeIdPreview();
 }
 

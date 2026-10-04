@@ -23,6 +23,3 @@ Example: Full-time + ₱350 sales + normal attendance:
 350 × 40% = ₱140, so pay remains ₱250.
 
 For production, replace the demo admin credentials with Firebase Authentication and store employee/DTR/sales records in Firestore with security rules.
-
-
-V57 UI patch: mobile horizontal scrolling is isolated to table containers only; the whole mobile page remains fixed. Editable Base Pay / Day remains in Employees > employee list and is still used by payroll.

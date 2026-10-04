@@ -19,19 +19,6 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 @media(max-width:700px){.dashboard-header h1{font-size:25px}.dashboard-header p{font-size:13px}.header-date{display:none}.kpi-grid,.chart-grid,.summary-grid{grid-template-columns:1fr}.income-card,.summary-grid .recent-sales-card{grid-column:auto}.form-grid{grid-template-columns:1fr}.reconciliation-grid{grid-template-columns:1fr 1fr}.digital-clock{font-size:34px}.status-visual{height:240px;margin-left:8px;margin-right:8px}.right-brand{height:120px}.right-brand img{width:230px}}
 @media(max-width:480px){.admin-main{padding:12px 8px}.login-card{margin:35px 8px;padding:20px}.kpi-card b{font-size:21px}.reconciliation-grid{grid-template-columns:1fr}.table{min-width:650px}.attendance-card,.summary-grid .dashboard-card,.chart-card,.income-card{overflow-x:auto}.sidebar-brand{height:145px}.sidebar-brand img{width:190px}}
 
-
-/* Targeted mobile table scrolling: keep the page fixed, scroll only the data table. */
-.mobile-table-scroll{width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#1d8cff #071522;}
-.mobile-table-scroll>.table{min-width:max-content;}
-@media(max-width:480px){
-  .mobile-table-scroll{border-radius:10px;touch-action:pan-x pan-y;}
-  .mobile-table-scroll>.table{min-width:760px;}
-  .attendance-card,.summary-grid .dashboard-card,.chart-card,.income-card{overflow:hidden;}
-  .income-card .donut{width:132px;height:132px;}
-  .income-card .donut:before{width:90px;height:90px;}
-  .income-card .donut-wrap{padding-top:10px;padding-bottom:8px;}
-}
-
 /* Employee DTR history panel */
 .employee-history{margin-top:18px;padding:18px;border:1px solid rgba(80,150,220,.22);border-radius:16px;background:rgba(7,20,34,.72);box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .history-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
@@ -151,63 +138,13 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .kpi-icon svg,.calendar-icon svg,.heading-icon svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.calendar-icon{display:grid;place-items:center;width:30px;height:30px}.heading-icon{display:inline-grid;vertical-align:-5px;place-items:center;margin-right:7px;color:#4ba4ff}.heading-icon svg{width:18px;height:18px}.kpi-icon svg{width:24px;height:24px}
 @media(max-width:950px){
   .dashboard-right{display:none!important}
-  .dashboard-header{position:sticky;top:0;z-index:25;background:linear-gradient(180deg,#030d18 78%,rgba(3,13,24,0));padding:8px 4px 16px;margin-left:-4px;margin-right:-4px}
-  .mobile-menu{position:sticky;top:8px;z-index:60;display:grid!important;place-items:center;width:58px;height:58px;padding:0;margin:0 10px 0 0;border-radius:16px;background:#071827;border:1px solid #173149;color:#eaf4ff;font-size:0;box-shadow:0 10px 30px #0007}
-  .mobile-menu:before{content:'☰';font-size:31px;line-height:1}
+  .dashboard-header{position:sticky;top:0;z-index:25;background:linear-gradient(180deg,#030d18 78%,rgba(3,13,24,0));padding:8px 4px 16px 50px;margin-left:-4px;margin-right:-4px}
+  .mobile-menu{position:fixed!important;top:4px;left:0;z-index:200;display:grid!important;place-items:center;width:42px;height:42px;padding:0;margin:0;border-radius:0 12px 12px 0;background:#071827;border:1px solid #214663;color:#eaf4ff;font-size:0;box-shadow:0 8px 22px #0009}
+  .mobile-menu:before{content:'☰';font-size:25px;line-height:1}
   .admin-sidebar{box-shadow:20px 0 60px #000b}
   .admin-sidebar.open{transform:translateX(0);}
 }
 @media(max-width:600px){
   .dashboard-header{gap:8px}.dashboard-header>div:nth-child(2){min-width:0}.dashboard-header h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kpi-card{min-height:92px;padding:13px}.kpi-icon{width:42px;height:42px}
-  .income-card .donut-wrap{min-height:230px;display:grid;place-items:center;overflow:visible}.income-card .donut{margin:auto;width:170px;height:170px}
-}
-
-/* V56 — targeted mobile horizontal scrolling for dense employee/DTR/payroll tables only. */
-.mobile-table-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:thin;border-radius:10px;}
-.mobile-table-scroll .table{min-width:760px;}
-.mobile-table-scroll::-webkit-scrollbar{height:6px;}
-.mobile-table-scroll::-webkit-scrollbar-thumb{background:#23415a;border-radius:20px;}
-.base-pay-editor{display:flex;align-items:center;gap:6px;min-width:145px;}
-.base-pay-editor input{width:92px;padding:8px 9px;font-size:12px;}
-.save-base-pay{padding:8px 9px;font-size:10px;white-space:nowrap;}
-@media(max-width:600px){
-  .mobile-table-scroll{margin-right:0;}
-  .mobile-table-scroll .table{min-width:760px;}
-  #overviewAttendance .table{min-width:900px;}
-  #attendanceTable .table{min-width:980px;}
-  #employeeTable .table{min-width:860px;}
-  #payrollTable .table{min-width:780px;}
-  #payrollDailyTable .table{min-width:800px;}
-}
-
-
-/* V58 — Mobile polish */
-@media(max-width:600px){
-  input,select,textarea,button{font-size:16px!important;}
-  .income-card{padding:16px 14px 14px;overflow:hidden;}
-  .income-card .card-heading h2{font-size:18px;}
-  .income-card .donut-wrap{min-height:185px;height:185px;padding:6px 0 4px;display:grid;place-items:center;overflow:visible;}
-  .income-card .donut{width:138px;height:138px;margin:auto;box-shadow:0 0 24px #1687ff16;}
-  .income-card .donut:before{width:88px;height:88px;}
-  .income-card .donut b{font-size:16px;}
-  .income-card .donut span{font-size:10px;}
-  .income-card .legend{gap:7px;font-size:12px;padding:0 2px 2px;}
-  .income-card .legend span{min-height:22px;}
-}
-
-
-/* V59 — mobile navigation stays fixed and Income Breakdown donut hole stays centered. */
-.donut{position:relative;}
-@media(max-width:950px){
-  .mobile-menu{position:fixed!important;top:12px;left:10px;z-index:100;display:grid!important;place-items:center;width:48px;height:48px;padding:0;margin:0;border-radius:14px;background:#071827;border:1px solid #214663;color:#eaf4ff;font-size:0;box-shadow:0 10px 30px #0009;}
-  .mobile-menu:before{content:'☰';font-size:27px;line-height:1;}
-  .dashboard-header{padding-left:64px!important;}
-}
-@media(max-width:600px){
-  .income-card .donut-wrap{height:178px;min-height:178px;padding:4px 0 2px;display:grid;place-items:center;}
-  .income-card .donut{width:138px;height:138px;margin:0;position:relative;place-self:center;}
-  .income-card .donut:before{width:88px;height:88px;left:50%;top:50%;transform:translate(-50%,-50%);position:absolute;}
-}
-@media(max-width:600px){
-  #attendanceTable .table{min-width:1120px;}
+  .income-card .donut-wrap{min-height:178px;height:178px;padding:4px 0 2px;display:grid;place-items:center;overflow:visible}.income-card .donut{width:138px;height:138px;margin:0;position:relative;place-self:center}.income-card .donut:before{width:88px;height:88px;left:50%;top:50%;transform:translate(-50%,-50%);position:absolute}
 }

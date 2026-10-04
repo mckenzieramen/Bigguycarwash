@@ -67,7 +67,7 @@
             <div class="dashboard-card income-card"><div class="card-heading"><h2><span class="heading-icon calendar-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16"/></svg></span>Income Breakdown</h2></div><div class="donut-wrap"><div class="donut" id="incomeDonut"><div><b id="incomeTotal">₱0.00</b><span>Total Sales</span></div></div></div><div class="legend"><span><i class="dot blue"></i>Carwash Services <b id="incomeCarwash">0%</b></span><span><i class="dot gold"></i>Detailing <b id="incomeDetailing">0%</b></span><span><i class="dot neutral"></i>Add-ons <b id="incomeAddons">0%</b></span></div></div>
           </div>
 
-          <div class="dashboard-card attendance-card"><div class="card-heading"><h2>Today's Attendance</h2><button class="small-action" data-tab-target="attendance">View All</button></div><div id="overviewAttendance" class="mobile-table-scroll"></div></div>
+          <div class="dashboard-card attendance-card"><div class="card-heading"><h2>Today's Attendance</h2><button class="small-action" data-tab-target="attendance">View All</button></div><div id="overviewAttendance"></div></div>
 
           <div class="summary-grid">
             <div class="dashboard-card"><div class="card-heading"><h2>Top Sales Today</h2></div><div id="topSalesToday"></div></div>
@@ -86,11 +86,11 @@
               <div class="field"><label for="empLastName">Last Name</label><input id="empLastName" placeholder="Last name" autocomplete="family-name" required></div>
               <div class="field"><label for="empId">Employee ID</label><input id="empId" placeholder="Auto-generated" readonly aria-readonly="true" class="readonly-field"></div>
               <div class="field"><label for="empHireDate">Date Started</label><input id="empHireDate" type="date" required></div>
-              <div class="field"><label for="empType">Employment Type</label><select id="empType"><option value="full">Full Time</option><option value="semi">Semi Full Time</option><option value="part">Part Time</option></select></div>
+              <div class="field"><label for="empType">Employment Type</label><select id="empType"><option value="full">Full Time — ₱250/day</option><option value="semi">Semi Full Time — ₱200/day</option><option value="part">Part Time — ₱150/day</option></select></div>
               <div class="field"><label for="empStart">Scheduled Start</label><input id="empStart" type="time" value="08:00" required></div>
               <div class="field employee-add-field"><label>&nbsp;</label><button type="submit" class="add-employee-btn">ADD EMPLOYEE &amp; ENROLL FACE</button></div>
             </form>
-            <div id="employeeTable" class="mobile-table-scroll"></div>
+            <div id="employeeTable"></div>
             <div id="employeeHistory" class="employee-history hidden"></div>
           </div>
         </section>
@@ -103,7 +103,7 @@
   </div>
   <div class="card inner" style="margin-top:10px">
   <div class="card-heading"><div><h2>Attendance Log</h2><span class="muted">Select a date from the calendar. You can mark an employee Absent when there is no work record.</span></div><input id="attendanceDate" type="date" aria-label="Attendance date"></div>
-  <div id="attendanceTable" class="mobile-table-scroll"></div>
+  <div id="attendanceTable"></div>
 </div>
 </section>
         <section id="sales" class="tab-panel hidden">
@@ -134,8 +134,8 @@
     <div class="payroll-period"><label for="payrollMonth">Pay Period</label><input id="payrollMonth" type="month"></div>
   </div>
   <div id="payrollSummary" class="payroll-summary-grid"></div>
-  <div class="card inner"><div class="card-heading"><div><h2>Monthly Accumulated Payroll</h2><span id="payrollPeriodLabel" class="muted"></span></div></div><div id="payrollTable" class="mobile-table-scroll"></div></div>
-  <div class="card inner"><div class="card-heading"><div><h2>Daily Accumulation from DTR</h2><span class="muted">Every workday adds to the employee's running monthly total.</span></div></div><div id="payrollDailyTable" class="mobile-table-scroll"></div></div>
+  <div class="card inner"><div class="card-heading"><div><h2>Monthly Accumulated Payroll</h2><span id="payrollPeriodLabel" class="muted"></span></div></div><div id="payrollTable"></div></div>
+  <div class="card inner"><div class="card-heading"><div><h2>Daily Accumulation from DTR</h2><span class="muted">Every workday adds to the employee's running monthly total.</span></div></div><div id="payrollDailyTable"></div></div>
 </section>
         <section id="reports" class="tab-panel hidden">
   <div class="reports-page-head"><div><span class="section-kicker">BUSINESS REPORTING</span><h2>Reports</h2><p class="muted">Read-only business records generated from the Daily Sales Log and DTR.</p></div><div class="report-head-actions"><input id="reportDate" type="date"><button type="button" class="small-action" id="reportPrintBtn">PRINT</button></div></div>
