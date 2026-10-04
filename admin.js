@@ -8,6 +8,7 @@ state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
 state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?state.faceUpdatedAt:{};
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 state.scheduleWeekOf=state.scheduleWeekOf||"";
+state.scheduleDrafts=state.scheduleDrafts&&typeof state.scheduleDrafts==="object"?state.scheduleDrafts:{};
 let enrollStream=null,modelsReady=false;
 // Start the schedule screen as a blank, unsaved draft without deleting any saved Firebase schedule/time data.
 let scheduleBlankDraft=true;
@@ -336,6 +337,46 @@ function syncRosterDuplicateDay(changed){
  }
  refreshRosterDayAvailability(day);
 }
+function scheduleDraftForWeek(weekOf){
+ const key=mondayOfWeek(weekOf||today());
+ const draft=state.scheduleDrafts?.[key];
+ return draft&&typeof draft==="object"?draft:null;
+}
+function captureCurrentScheduleDraft(weekOf){
+ const key=mondayOfWeek(weekOf||today());
+ const draft={};
+ document.querySelectorAll('#scheduleRoster select[data-roster-site][data-roster-day]').forEach(sel=>{
+   const id=String(sel.value||"");
+   const day=sel.dataset.rosterDay;
+   const site=sel.dataset.rosterSite;
+   if(!day||!site)return;
+   if(!draft[id])draft[id]={};
+   if(id)draft[id][day]=site;
+ });
+ state.scheduleDrafts=state.scheduleDrafts||{};
+ state.scheduleDrafts[key]=draft;
+ state.scheduleWeekOf=key;
+ cacheState();
+ return draft;
+}
+function draftAssignmentsForWeek(weekOf){
+ const key=mondayOfWeek(weekOf||today());
+ const draft=scheduleDraftForWeek(key);
+ if(!draft)return null;
+ const out={};
+ Object.entries(draft).forEach(([id,days])=>{
+   if(!id||!days||typeof days!=="object")return;
+   out[id]={...days};
+ });
+ return out;
+}
+function clearScheduleDraft(weekOf){
+ const key=mondayOfWeek(weekOf||today());
+ if(state.scheduleDrafts&&Object.prototype.hasOwnProperty.call(state.scheduleDrafts,key)){
+   delete state.scheduleDrafts[key];
+   cacheState();
+ }
+}
 function hasSavedScheduleForWeek(weekOf){
  const key=mondayOfWeek(weekOf||today());
  return state.employees.some(e=>{
@@ -368,12 +409,14 @@ function setScheduleMode(mode){
  if(scheduleMode==="scheduled")renderSavedScheduleWeeks();
 }
 function createNewSchedule(){
+ if(scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());
  const week=nextCreateScheduleWeek();
  if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
  state.scheduleWeekOf=week;
  scheduleBlankDraft=true;
  scheduleModeInitialized=true;
  setScheduleMode("create");
+ const saveBtn=$("saveRosterSchedule"); if(saveBtn)saveBtn.textContent="SAVE SCHEDULE";
  renderScheduleRoster();
  renderSavedScheduleWeeks();
 }
@@ -385,16 +428,46 @@ function renderSavedScheduleWeeks(){
    return;
  }
  const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
- root.innerHTML='<div class="saved-weeks-heading"><strong>Saved weeks</strong><span>Select a week to view or edit it.</span></div><div class="saved-weeks-list">'+weeks.slice().reverse().map(w=>`<button type="button" class="saved-week-btn ${w===current?'active':''}" data-week="${w}"><span>${prettyScheduleDate(w)} – ${prettyScheduleDate(addDaysISO(w,6))}</span><small>VIEW / EDIT</small></button>`).join('')+'</div>';
+ root.innerHTML='<div class="saved-weeks-heading"><strong>Saved weeks</strong><span>Select a saved week to view, edit, or delete it.</span></div><div class="saved-weeks-list">'+weeks.slice().reverse().map(w=>`<div class="saved-week-item ${w===current?'active':''}"><button type="button" class="saved-week-btn" data-week="${w}"><span>${prettyScheduleDate(w)} – ${prettyScheduleDate(addDaysISO(w,6))}</span><small>VIEW / EDIT</small></button><button type="button" class="saved-week-delete" data-delete-week="${w}" title="Delete saved schedule">DELETE</button></div>`).join('')+'</div>';
  root.querySelectorAll('.saved-week-btn').forEach(btn=>btn.addEventListener('click',()=>{
-   if($("scheduleWeekOf"))$("scheduleWeekOf").value=btn.dataset.week;
-   state.scheduleWeekOf=btn.dataset.week;
+   const week=btn.dataset.week;
+   if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
+   state.scheduleWeekOf=week;
    scheduleBlankDraft=false;
    setScheduleMode("scheduled");
    renderScheduleRoster();
    renderSavedScheduleWeeks();
+   const saveBtn=$("saveRosterSchedule"); if(saveBtn)saveBtn.textContent="UPDATE SCHEDULE";
+ }));
+ root.querySelectorAll('.saved-week-delete').forEach(btn=>btn.addEventListener('click',async()=>{
+   const week=btn.dataset.deleteWeek;
+   if(!week)return;
+   if(!confirm(`Delete the saved schedule for ${prettyScheduleDate(week)} – ${prettyScheduleDate(addDaysISO(week,6))}? This removes only that weekly schedule, not attendance, sales, payroll, employees, or faces.`))return;
+   try{
+     if(window.BigGuysCloud?.deleteScheduleWeek) await window.BigGuysCloud.deleteScheduleWeek(week);
+     state.employees=state.employees.map(e=>{
+       const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
+       delete weekly[week];
+       return {...e,weeklySchedules:weekly};
+     });
+     clearScheduleDraft(week);
+     const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
+     if(current===week){
+       const next=savedScheduleWeeks().filter(w=>w!==week).sort().pop()||mondayOfWeek(today());
+       if($("scheduleWeekOf"))$("scheduleWeekOf").value=next;
+       state.scheduleWeekOf=next;
+       scheduleBlankDraft=true;
+       setScheduleMode("create");
+       const saveBtn=$("saveRosterSchedule"); if(saveBtn)saveBtn.textContent="SAVE SCHEDULE";
+       renderScheduleRoster();
+     }
+     cacheState();
+     renderSavedScheduleWeeks();
+     alert(`Schedule deleted for the week of ${prettyScheduleDate(week)}.`);
+   }catch(err){console.error("Schedule delete failed",err);alert(`Unable to delete schedule: ${err?.code||err?.message||err}`);}
  }));
 }
+
 function renderSchedules(){
  const weekInput=$("scheduleWeekOf");
  if(weekInput && !weekInput.value)weekInput.value=state.scheduleWeekOf||today();
@@ -405,11 +478,14 @@ function renderSchedules(){
    scheduleMode=savedScheduleWeeks().length?"scheduled":"create";
    scheduleModeInitialized=true;
  }
- scheduleBlankDraft=scheduleMode==="create"?true:!hasSavedScheduleForWeek(weekOf);
+ scheduleBlankDraft=scheduleMode==="create"?!scheduleDraftForWeek(weekOf):!hasSavedScheduleForWeek(weekOf);
  renderScheduleRoster();
  renderSavedScheduleWeeks();
  setScheduleMode(scheduleMode);
+ const saveBtn=$("saveRosterSchedule");
+ if(saveBtn)saveBtn.textContent=(scheduleMode==="scheduled"&&hasSavedScheduleForWeek(weekOf))?"UPDATE SCHEDULE":"SAVE SCHEDULE";
 }
+
 async function saveRosterSchedule(){
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||today());
  const assignments=scheduleRosterAssignments();
@@ -449,6 +525,7 @@ async function saveRosterSchedule(){
    }
    state.employees=employees;
    state.scheduleWeekOf=weekOf;
+   clearScheduleDraft(weekOf);
    scheduleBlankDraft=false;
    scheduleMode='scheduled';
    cacheState();
@@ -465,7 +542,12 @@ function renderScheduleRoster(){
  const siteOrder=["site1","site2","site3","off"];
  const rowLimits={site1:10,site2:5,site3:5,off:5};
  const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+ const draft=draftAssignmentsForWeek(weekOf);
  const employeeAt=(siteId,day,rowIndex)=>{
+   if(draft){
+     const matches=state.employees.filter(e=>draft[String(e.id)]?.[day]===siteId);
+     return matches[rowIndex]?.id||"";
+   }
    if(scheduleBlankDraft)return "";
    const matches=state.employees.filter(e=>{
      const hasWeeklySchedules=e?.weeklySchedules&&typeof e.weeklySchedules==="object"&&Object.keys(e.weeklySchedules).length>0;
@@ -495,7 +577,7 @@ function renderScheduleRoster(){
    const site=DTR_SITES[siteId];
    return makeCard(siteId,site?site.name:"Day Off",site?`${site.lat}, ${site.lng}`:"Employees not scheduled / OFF",site?"WEEKLY ROSTER":"OFF",rowLimits[siteId]);
  }).join("");
- root.querySelectorAll('.site-roster-select').forEach(sel=>sel.addEventListener('change',()=>syncRosterDuplicateDay(sel)));
+ root.querySelectorAll('.site-roster-select').forEach(sel=>sel.addEventListener('change',()=>{syncRosterDuplicateDay(sel);captureCurrentScheduleDraft(weekOf);}));
  normalizeRosterDuplicates();
  const summary=$("scheduleWeekSummary");
  if(summary)summary.innerHTML=`<strong>Schedule week:</strong><span>${prettyScheduleDate(weekOf)} – ${prettyScheduleDate(addDaysISO(weekOf,6))}</span>`;
@@ -1126,6 +1208,8 @@ $("payrollMonth")?.addEventListener("change",renderPayroll);
 $("salesViewDate")?.addEventListener("change",()=>renderSalesPage("daily"));
 $("attendanceDate")?.addEventListener("change",()=>renderAttendanceAdmin(attendanceDateValue()));
 $("scheduleWeekOf")?.addEventListener("change",()=>{
+ const previous=state.scheduleWeekOf||$("scheduleWeekOf")?.value||today();
+ if(scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(previous);
  const selected=$("scheduleWeekOf")?.value||today();
  const weekOf=mondayOfWeek(selected);
  if($("scheduleWeekOf"))$("scheduleWeekOf").value=weekOf;
