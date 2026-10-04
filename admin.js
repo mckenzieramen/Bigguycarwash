@@ -80,12 +80,12 @@ function scheduleForEmployee(e,dateOrWeek=today(),useLegacy=true){
 }
 function scheduledSiteId(e,date=today()){
  if(!e)return ""; const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];
- const value=scheduleForEmployee(e,date,true)[day]; return value==="off"?"":(DTR_SITES[value]?value:(e.siteId||""));
+ const value=scheduleForEmployee(e,date,false)[day]; return value==="off"?"":(DTR_SITES[value]?value:"");
 }
 function scheduledSiteName(e,date=today()){return siteLabel(scheduledSiteId(e,date));}
 
 function employeeOffDays(e){return Array.isArray(e?.offDays)?e.offDays:[];}
-function isEmployeeOff(e,date){if(!e||!date)return false;const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];return scheduleForEmployee(e,date,true)[day]==="off";}
+function isEmployeeOff(e,date){if(!e||!date)return false;const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];const value=scheduleForEmployee(e,date,false)[day];return value==="off"||value==="";}
 function isBeforeHire(e,date){return !!(e?.hireDate&&date<e.hireDate);}
 function previousDate(date){const d=new Date(date+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 function previousDayPenaltyApplies(emp,date){
@@ -341,12 +341,37 @@ function hasSavedScheduleForWeek(weekOf){
    return Object.prototype.hasOwnProperty.call(weekly,key) && weekly[key] && typeof weekly[key]==="object";
  });
 }
+function savedScheduleWeeks(){
+ const keys=new Set();
+ state.employees.forEach(e=>{
+   const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?e.weeklySchedules:{};
+   Object.keys(weekly).forEach(k=>{if(/^\d{4}-\d{2}-\d{2}$/.test(k))keys.add(k);});
+ });
+ return [...keys].sort();
+}
+function renderSavedScheduleWeeks(){
+ const root=$("scheduleSavedWeeks"); if(!root)return;
+ const weeks=savedScheduleWeeks();
+ if(!weeks.length){root.innerHTML='<span class="muted">No saved schedules yet. Create a week, assign employees, then click SAVE SCHEDULE.</span>';return;}
+ const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
+ root.innerHTML='<strong>Saved weeks:</strong> '+weeks.map(w=>`<button type="button" class="saved-week-btn ${w===current?'active':''}" data-week="${w}">${prettyScheduleDate(w)} – ${prettyScheduleDate(addDaysISO(w,6))}</button>`).join('');
+ root.querySelectorAll('.saved-week-btn').forEach(btn=>btn.addEventListener('click',()=>{
+   if($("scheduleWeekOf"))$("scheduleWeekOf").value=btn.dataset.week;
+   state.scheduleWeekOf=btn.dataset.week;
+   scheduleBlankDraft=!hasSavedScheduleForWeek(btn.dataset.week);
+   renderScheduleRoster();
+   renderSavedScheduleWeeks();
+ }));
+}
 function renderSchedules(){
  const weekInput=$("scheduleWeekOf");
  if(weekInput && !weekInput.value)weekInput.value=state.scheduleWeekOf||today();
  const weekOf=mondayOfWeek(weekInput?.value||state.scheduleWeekOf||today());
+ if(weekInput)weekInput.value=weekOf;
+ state.scheduleWeekOf=weekOf;
  scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
  renderScheduleRoster();
+ renderSavedScheduleWeeks();
 }
 async function saveRosterSchedule(){
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||today());
@@ -573,7 +598,7 @@ $("employeeForm").onsubmit=async e=>{
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
-   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,siteId:"site1",weeklySchedule:{Monday:"site1",Tuesday:"site1",Wednesday:"site1",Thursday:"site1",Friday:"site1",Saturday:"site1",Sunday:"site1"},offDays:[]};
+   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,siteId:"",weeklySchedules:{},weeklySchedule:{Monday:"",Tuesday:"",Wednesday:"",Thursday:"",Friday:"",Saturday:"",Sunday:""},offDays:[]};
    state.employees.push(employee);
    cacheState();
    if(window.BigGuysCloud?.saveEmployee){
@@ -1063,8 +1088,11 @@ $("attendanceDate")?.addEventListener("change",()=>renderAttendanceAdmin(attenda
 $("scheduleWeekOf")?.addEventListener("change",()=>{
  const selected=$("scheduleWeekOf")?.value||today();
  const weekOf=mondayOfWeek(selected);
+ if($("scheduleWeekOf"))$("scheduleWeekOf").value=weekOf;
+ state.scheduleWeekOf=weekOf;
  scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
  renderScheduleRoster();
+ renderSavedScheduleWeeks();
 });
 $("saveRosterSchedule")?.addEventListener("click",saveRosterSchedule);
 

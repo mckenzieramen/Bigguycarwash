@@ -212,3 +212,5 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .site-roster-cell.empty .site-roster-select{color:#eaf4fb !important;}
 .site-roster-day.sun{background:#808080 !important;color:#fff !important;}
 .site-roster-title strong,.site-roster-title small{color:#eaf4fb !important;}
+
+.schedule-saved-weeks{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:8px}.saved-week-btn{border:1px solid #23445f;background:#081a2a;color:#dceaf5;border-radius:7px;padding:6px 9px;font-size:10px;font-weight:800;cursor:pointer}.saved-week-btn:hover,.saved-week-btn.active{border-color:#1687ff;background:#0b2a47;color:#fff}
