@@ -59,8 +59,21 @@ const DTR_SITES={
  site3:{name:"Site 3",lat:14.091233,lng:122.9467024,radius:250}
 };
 function siteLabel(id){return DTR_SITES[id]?.name||"Unassigned";}
+const SCHEDULE_SITE_OPTIONS=["site1","site2","site3","off"];
+function scheduleForEmployee(e){
+ const existing=e?.weeklySchedule&&typeof e.weeklySchedule==="object"?e.weeklySchedule:{};
+ const fallback=e?.siteId||"site1"; const out={};
+ WEEKDAYS.slice(1).forEach(day=>{out[day]=SCHEDULE_SITE_OPTIONS.includes(existing[day])?existing[day]:fallback;});
+ return out;
+}
+function scheduledSiteId(e,date=today()){
+ if(!e)return ""; const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];
+ const value=scheduleForEmployee(e)[day]; return value==="off"?"":(DTR_SITES[value]?value:(e.siteId||""));
+}
+function scheduledSiteName(e,date=today()){return siteLabel(scheduledSiteId(e,date));}
+
 function employeeOffDays(e){return Array.isArray(e?.offDays)?e.offDays:[];}
-function isEmployeeOff(e,date){if(!e||!date)return false;return employeeOffDays(e).includes(WEEKDAYS[new Date(date+"T00:00:00").getDay()]);}
+function isEmployeeOff(e,date){if(!e||!date)return false;const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];return employeeOffDays(e).includes(day)||scheduleForEmployee(e)[day]==="off";}
 function isBeforeHire(e,date){return !!(e?.hireDate&&date<e.hireDate);}
 function previousDate(date){const d=new Date(date+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 function previousDayPenaltyApplies(emp,date){
@@ -239,38 +252,59 @@ async function markEmployeeExcuse(employeeId,date){
    cacheState();refresh();
  }catch(err){console.error("Mark excuse failed",err);alert(`Unable to mark excuse: ${err?.code||err?.message||err}`);}
 }
-function renderSettings(){
- const select=$("settingsEmployee"); if(!select)return;
+function renderSchedules(){
+ const select=$("scheduleEmployee"); if(!select)return;
  const current=select.value;
  select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${e.name} — ${e.id}</option>`).join("");
  if(state.employees.some(e=>String(e.id)===String(current)))select.value=current;
  const e=state.employees.find(x=>String(x.id)===String(select.value));
- const wrap=$("employeeOffDays"); if(!wrap)return;
- const selected=new Set(employeeOffDays(e));
- wrap.innerHTML=WEEKDAYS.map(day=>`<label class="off-day-option ${selected.has(day)?"selected":""}"><input type="checkbox" value="${day}" ${selected.has(day)?"checked":""}><span>${day}</span></label>`).join("");
- wrap.querySelectorAll('input[type="checkbox"]').forEach(input=>input.addEventListener("change",()=>input.closest(".off-day-option")?.classList.toggle("selected",input.checked)));
- $("offDaysSummary").innerHTML=e?`<strong>${e.name}</strong><span>${selected.size?Array.from(selected).join(" • "):"No regular days off selected."}</span>`:"Select an employee to configure days off.";
+ const wrap=$("employeeOffDays");
+ if(wrap){
+   const selected=new Set(employeeOffDays(e));
+   wrap.innerHTML=WEEKDAYS.slice(1).map(day=>`<label class="off-day-option ${selected.has(day)?"selected":""}"><input type="checkbox" value="${day}" ${selected.has(day)?"checked":""}><span>${day}</span></label>`).join("");
+   wrap.querySelectorAll('input[type="checkbox"]').forEach(input=>input.addEventListener("change",()=>input.closest(".off-day-option")?.classList.toggle("selected",input.checked)));
+   $("offDaysSummary").innerHTML=e?`<strong>${e.name}</strong><span>${selected.size?Array.from(selected).join(" • "):"No regular days off selected."}</span>`:"Select an employee to configure days off.";
+ }
+ const editor=$("scheduleEditor");
+ if(editor){
+   if(!e)editor.innerHTML='<div class="schedule-empty">Select an employee to configure the weekly site schedule.</div>';
+   else {
+     const schedule=scheduleForEmployee(e);
+     editor.innerHTML=`<div class="schedule-editor-head"><div><h3>${e.name}</h3><span class="muted">Choose the site for each day. OFF means the employee is not scheduled.</span></div><button type="button" id="saveWeeklySchedule" class="small-action">SAVE WEEKLY SCHEDULE</button></div><div class="schedule-days-grid">${WEEKDAYS.slice(1).map(day=>`<label class="schedule-day-card"><span>${day}</span><select data-schedule-day="${day}"><option value="site1">Site 1</option><option value="site2">Site 2</option><option value="site3">Site 3</option><option value="off">OFF</option></select></label>`).join("")}</div>`;
+     editor.querySelectorAll('[data-schedule-day]').forEach(sel=>sel.value=schedule[sel.dataset.scheduleDay]||"off");
+     $("saveWeeklySchedule").onclick=saveWeeklySchedule;
+   }
+ }
+ renderScheduleRoster();
+}
+async function saveWeeklySchedule(){
+ const id=$("scheduleEmployee")?.value, current=state.employees.find(x=>String(x.id)===String(id));
+ if(!current){alert("Select an employee first.");return;}
+ const weeklySchedule={}; document.querySelectorAll('#scheduleEditor [data-schedule-day]').forEach(sel=>weeklySchedule[sel.dataset.scheduleDay]=SCHEDULE_SITE_OPTIONS.includes(sel.value)?sel.value:"off");
+ const offDays=[...document.querySelectorAll('#employeeOffDays input[type="checkbox"]:checked')].map(x=>x.value);
+ const employee={...current,weeklySchedule,offDays:[...new Set(offDays)]};
+ try{
+   let next;if(window.BigGuysCloud?.saveEmployee)next=await window.BigGuysCloud.saveEmployee(employee);else next=await save();
+   if(next&&Array.isArray(next.employees))state=next;else{const local=state.employees.find(x=>String(x.id)===String(id));if(local)Object.assign(local,employee);}
+   cacheState(); renderSchedules(); renderAttendanceAdmin(attendanceDateValue()); renderPayroll(); refresh();
+   alert(`Weekly site schedule saved for ${employee.name}.`);
+ }catch(err){console.error("Weekly schedule save failed",err);alert(`Unable to save schedule: ${err?.code||err?.message||err}`);}
 }
 async function saveEmployeeOffDays(){
- const id=$("settingsEmployee")?.value;
- const current=state.employees.find(x=>String(x.id)===String(id));
+ const id=$("scheduleEmployee")?.value, current=state.employees.find(x=>String(x.id)===String(id));
  if(!current){alert("Select an employee first.");return;}
  const offDays=[...document.querySelectorAll('#employeeOffDays input[type="checkbox"]:checked')].map(x=>x.value);
  const employee={...current,offDays:[...new Set(offDays)]};
  try{
-   let next;
-   if(window.BigGuysCloud?.saveEmployee) next=await window.BigGuysCloud.saveEmployee(employee);
-   else next=await save();
-   if(next&&Array.isArray(next.employees)) state=next; else { const local=state.employees.find(x=>String(x.id)===String(id)); if(local)local.offDays=employee.offDays; }
-   cacheState();
-   renderSettings();
-   renderAttendanceAdmin(attendanceDateValue());
-   renderPayroll();
+   let next;if(window.BigGuysCloud?.saveEmployee)next=await window.BigGuysCloud.saveEmployee(employee);else next=await save();
+   if(next&&Array.isArray(next.employees))state=next;else{const local=state.employees.find(x=>String(x.id)===String(id));if(local)local.offDays=employee.offDays;}
+   cacheState();renderSchedules();renderAttendanceAdmin(attendanceDateValue());renderPayroll();
    alert(employee.offDays.length?`Days off saved: ${employee.offDays.join(", ")}`:"Days off cleared. No regular days off are set.");
- }catch(err){
-   console.error("Days off save failed",err);
-   alert(`Unable to save days off: ${err?.code||err?.message||err}`);
- }
+ }catch(err){console.error("Days off save failed",err);alert(`Unable to save days off: ${err?.code||err?.message||err}`);}
+}
+function renderScheduleRoster(){
+ const root=$("scheduleRoster");if(!root)return; const days=WEEKDAYS.slice(1);
+ root.innerHTML=Object.entries(DTR_SITES).map(([siteId,site])=>`<div class="site-roster-card"><div class="site-roster-title"><strong>${site.name}</strong><span>${site.lat}, ${site.lng}</span></div><div class="site-roster-scroll"><div class="site-roster-grid"><div class="site-roster-corner">#</div>${days.map(d=>`<div class="site-roster-day">${d.toUpperCase()}</div>`).join("")}${state.employees.map((e,i)=>{const schedule=scheduleForEmployee(e);const activeDays=days.map(day=>schedule[day]===siteId?e.name:"—");return activeDays.some(v=>v!=="—")?`<div class="site-roster-num">${i+1}</div>${activeDays.map(v=>`<div class="site-roster-cell">${v}</div>`).join("")}`:""}).join("")}</div></div></div>`).join("");
 }
 function scrollContainerKey(el,i=0){
  const host=el.closest('[id]');
@@ -318,10 +352,9 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,siteLabel(e.siteId),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="edit-site-employee" data-id="${e.id}">EDIT SITE</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Site","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
-document.querySelectorAll(".edit-site-employee").forEach(btn=>btn.onclick=()=>editEmployeeSite(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
  renderSettings();
@@ -408,7 +441,7 @@ $("employeeForm").onsubmit=async e=>{
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
-   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,siteId:$("empSite")?.value||"site1",offDays:[]};
+   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,siteId:"site1",weeklySchedule:{Monday:"site1",Tuesday:"site1",Wednesday:"site1",Thursday:"site1",Friday:"site1",Saturday:"site1",Sunday:"site1"},offDays:[]};
    state.employees.push(employee);
    cacheState();
    if(window.BigGuysCloud?.saveEmployee){
@@ -419,7 +452,6 @@ $("employeeForm").onsubmit=async e=>{
    }
    e.target.reset();
    $("empStart").value='08:00';
-   $("empSite").value='site1';
    $("empHireDate").value=today();
    updateEmployeeIdPreview();
    refresh();
@@ -670,13 +702,15 @@ function renderEmployeeDtr(id){
  const history=recentMonthRows.length?recentMonthRows.map(a=>{
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
    const r=effectiveCommissionRate(e,a.date,a.status||"awol");
-   return [dateLabel(a.date),e.start||"—",a.clockIn||"—",a.clockOut||"—",dtrHours(a),money(sales),`${Math.round(r*100)}%`,money(isWorkedAttendance(a)?sales*r:0),statusBadge(a.status||"awol")];
+   const scheduled=scheduledSiteName(e,a.date);
+   const actual=siteLabel(a.actualSiteId||a.siteId||"");
+   return [dateLabel(a.date),scheduled,actual,a.clockIn||"—",a.clockOut||"—",money(sales),`${Math.round(r*100)}%`,money(isWorkedAttendance(a)?sales*r:0),statusBadge(a.status||"awol")];
  }):[];
  box.className="employee-dtr-profile";
- box.innerHTML=`<div class="dtr-employee-header"><div class="dtr-avatar">${(e.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div class="dtr-employee-main"><span class="section-kicker">EMPLOYEE DTR PROFILE</span><h3>${e.name}</h3><p>${e.id} · ${type} · ${siteLabel(e.siteId)} · Schedule ${e.start||"—"}</p></div><button type="button" class="dtr-print" onclick="window.print()">PRINT DTR</button></div>
+ box.innerHTML=`<div class="dtr-employee-header"><div class="dtr-avatar">${(e.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div class="dtr-employee-main"><span class="section-kicker">EMPLOYEE DTR PROFILE</span><h3>${e.name}</h3><p>${e.id} · ${type} · Today's Site: ${scheduledSiteName(e,today())} · Start ${e.start||"—"}</p></div><button type="button" class="dtr-print" onclick="window.print()">PRINT DTR</button></div>
  <div class="dtr-kpi-grid"><div class="dtr-kpi"><span>TIME IN TODAY</span><b>${todayRecord?.clockIn||"—"}</b><small>${todayRecord?statusBadge(todayRecord.status||"awol"):"No record yet"}</small></div><div class="dtr-kpi"><span>TIME OUT TODAY</span><b>${todayRecord?.clockOut||"—"}</b><small>${todayRecord?.clockOut?dtrHours(todayRecord):"Pending"}</small></div><div class="dtr-kpi"><span>TODAY'S SALES</span><b>${money(todaySales)}</b><small>Commission ${Math.round(rate*100)}%</small></div><div class="dtr-kpi"><span>TOTAL SALES</span><b>${money(totalSales)}</b><small>${rows.length} attendance record${rows.length===1?"":"s"}</small></div><div class="dtr-kpi"><span>TOTAL HOURS</span><b>${(totalMinutes/60).toFixed(2)}</b><small>Completed shifts</small></div><div class="dtr-kpi"><span>TOTAL SALARY</span><b>${money(totalSalary)}</b><small>Higher of minimum pay or commission</small></div><div class="dtr-kpi"><span>TODAY COMMISSION</span><b>${money(commission)}</b><small>${Math.round(rate*100)}% of today's sales</small></div></div>
  <div class="dtr-recent-month"><span class="section-kicker">RECENT MONTH</span><strong>${recentLabel}</strong><span class="muted">Showing the latest month with DTR records for this employee.</span></div>
- <div class="dtr-table-wrap">${history.length?table(history,["DATE","SCHEDULE","TIME IN","TIME OUT","HOURS","SALES","COMMISSION %","COMMISSION","STATUS"]):'<p class="muted dtr-no-records">No DTR history for this employee yet.</p>'}</div>`;
+ <div class="dtr-table-wrap">${history.length?table(history,["DATE","SCHEDULED SITE","ACTUAL SITE","TIME IN","TIME OUT","SALES","COMMISSION %","COMMISSION","STATUS"]):'<p class="muted dtr-no-records">No DTR history for this employee yet.</p>'}</div>`;
 }
 function refreshDtrSelector(){
  const select=$("dtrEmployeeSelect"); if(!select)return;
@@ -691,9 +725,10 @@ function showEmployeeHistory(id){
  const rows=state.attendance.filter(a=>a.employeeId===id).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.clockIn||"").localeCompare(a.clockIn||""));
  const html=rows.length?table(rows.map(a=>{
    const sales=state.sales.filter(x=>x.employeeId===id&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
-   const hours=a.clockIn&&a.clockOut?((minutes(a.clockOut)-minutes(a.clockIn))/60).toFixed(2):"—";
-   return [a.date,a.clockIn||"—",a.clockOut||"—",statusBadge(a.status||"awol"),hours,money(sales),money(pay(e,a.date))];
- }),["DATE","TIME IN","TIME OUT","STATUS","HOURS","SALES","DAILY PAY"]):'<p class="muted">No DTR history for this employee yet.</p>';
+   const scheduled=scheduledSiteName(e,a.date);
+   const actual=siteLabel(a.actualSiteId||a.siteId||"");
+   return [a.date,scheduled,actual,a.clockIn||"—",a.clockOut||"—",statusBadge(a.status||"awol"),money(sales),money(pay(e,a.date))];
+ }),["DATE","SCHEDULED SITE","ACTUAL SITE","TIME IN","TIME OUT","STATUS","SALES","DAILY PAY"]):'<p class="muted">No DTR history for this employee yet.</p>';
  const box=$("employeeHistory");
  if(box){
    box.innerHTML=`<div class="history-head"><div><h3>${e.name} — DTR History</h3><p class="muted">${e.id}</p></div><button type="button" id="closeHistory">CLOSE</button></div>${html}`;
@@ -701,20 +736,6 @@ function showEmployeeHistory(id){
    $("closeHistory").onclick=()=>box.classList.add("hidden");
    box.scrollIntoView({behavior:"smooth",block:"nearest"});
  }
-}
-async function editEmployeeSite(id){
- const e=state.employees.find(x=>String(x.id)===String(id));
- if(!e)return;
- const current=e.siteId||"site1";
- const value=prompt(`Assigned site for ${e.name}:\n\n1 = Site 1\n2 = Site 2\n3 = Site 3\n\nEnter 1, 2, or 3.`, current.replace("site",""));
- if(value===null)return;
- const siteId=`site${String(value).trim()}`;
- if(!DTR_SITES[siteId]){alert("Invalid site. Please choose 1, 2, or 3.");return;}
- e.siteId=siteId;
- try{
-   if(window.BigGuysCloud?.saveEmployee)state=await window.BigGuysCloud.saveEmployee(e);else await syncAdminNow();
-   cacheState();refresh();
- }catch(err){console.error("Employee site update failed",err);alert(`Unable to save site: ${err?.code||err?.message||err}`);}
 }
 async function deleteEmployee(id){
  const employee=state.employees.find(e=>e.id===id);
@@ -907,13 +928,13 @@ $("dtrEmployeeSelect")?.addEventListener("change",e=>{
 $("payrollMonth")?.addEventListener("change",renderPayroll);
 $("salesViewDate")?.addEventListener("change",()=>renderSalesPage("daily"));
 $("attendanceDate")?.addEventListener("change",()=>renderAttendanceAdmin(attendanceDateValue()));
-$("settingsEmployee")?.addEventListener("change",renderSettings);
+$("scheduleEmployee")?.addEventListener("change",renderSchedules);
 $("saveOffDays")?.addEventListener("click",saveEmployeeOffDays);
 
 $("reportDate").value=today();
 $("salesViewDate").value=today();
 if($("attendanceDate"))$("attendanceDate").value=today();
-renderSettings();
+renderSchedules();
 ensureAutomaticAbsences();
 let salesDayKey=today();setInterval(()=>{const d=today();if(d!==salesDayKey){salesDayKey=d;ensureAutomaticAbsences();if($("salesViewDate"))$("salesViewDate").value=d;if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');}},1000);
 $("payrollMonth").value=today().slice(0,7);
@@ -927,7 +948,7 @@ function activateTab(tab){
  const panel=$(tab);if(panel)panel.classList.remove("hidden");
  if(tab!=="sales")document.getElementById("salesSubnav")?.classList.remove("open");
  if(tab==="attendance")renderAttendanceAdmin(attendanceDateValue());
- if(tab==="settings")renderSettings();
+ if(tab==="schedules")renderSchedules();
  document.getElementById("adminSidebar")?.classList.remove("open");
 }
 document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();if(btn.id==="salesNav"){const sub=document.getElementById("salesSubnav");sub?.classList.toggle("open");activateTab("sales");}else activateTab(btn.dataset.tab)}));

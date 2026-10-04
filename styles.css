@@ -150,7 +150,7 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 }
 
 /* V66: persistent horizontal scrolling — scroll only inside the intended containers. */
-.table-scroll,.dtr-table-wrap,.report-box,.sales-period-table,#employeeTable{
+.table-scroll,.dtr-table-wrap,.report-box,.sales-period-table,#employeeTable,#employeeHistory{
   overflow-x:auto;
   overflow-y:hidden;
   -webkit-overflow-scrolling:touch;
@@ -158,9 +158,9 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
   overflow-anchor:none;
   scroll-behavior:auto;
 }
-.table-scroll>table,.dtr-table-wrap>table,.report-box>table,.sales-period-table>table,#employeeTable>table{
+.table-scroll>table,.dtr-table-wrap>table,.report-box>table,.sales-period-table>table,#employeeTable>table,#employeeHistory table{
   min-width:max-content;
 }
 @media(max-width:700px){
-  .table-scroll,.dtr-table-wrap,.report-box,.sales-period-table,#employeeTable{touch-action:pan-x pan-y;}
+  .table-scroll,.dtr-table-wrap,.report-box,.sales-period-table,#employeeTable,#employeeHistory{touch-action:pan-x pan-y;}
 }

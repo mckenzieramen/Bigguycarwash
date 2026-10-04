@@ -22,7 +22,7 @@
       </div>
       <button type="button" class="side-nav" data-tab="payroll"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M7 6V4h10v2"/><circle cx="12" cy="13" r="2.5"/><path d="M12 10.5v-1M12 16.5v-1"/></svg></span><span>Payroll</span></button>
       <button type="button" class="side-nav" data-tab="reports"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h6M9 16h6"/></svg></span><span>Reports</span><span class="nav-chevron">⌄</span></button>
-      <button type="button" class="side-nav" data-tab="settings"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.2 2.1 2.4.7.7 2.4L18.4 10l-.7 2.4.7 2.4-2.1 1.8-.7 2.4-2.4.7L12 21l-1.2-2.1-2.4-.7-.7-2.4L5.6 14l.7-2.4-.7-2.4 2.1-1.8.7-2.4 2.4-.7z"/><circle cx="12" cy="12" r="3"/></svg></span><span>Settings</span></button>
+      <button type="button" class="side-nav" data-tab="schedules"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.2 2.1 2.4.7.7 2.4L18.4 10l-.7 2.4.7 2.4-2.1 1.8-.7 2.4-2.4.7L12 21l-1.2-2.1-2.4-.7-.7-2.4L5.6 14l.7-2.4-.7-2.4 2.1-1.8.7-2.4 2.4-.7z"/><circle cx="12" cy="12" r="3"/></svg></span><span>Schedules</span></button>
     </nav>
     <button type="button" class="side-nav logout-nav" id="logoutBtn"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5M15 8l5 4-5 4M20 12H9"/></svg></span><span>Logout</span></button>
     <div class="sidebar-profile">
@@ -80,14 +80,13 @@
           <div class="card inner employee-management-card">
             <div class="section-kicker">EMPLOYEE SETUP</div>
             <h2>Add Employee</h2>
-            <p class="muted">Enter the employee details. The Employee ID is generated automatically from the start date and hiring sequence.</p>
+            <p class="muted">Enter the employee details. The Employee ID is generated automatically. Site assignment is managed in <strong>Schedules</strong> by day and is not edited from this employee form.</p>
             <form id="employeeForm" class="form-grid employee-form-grid">
               <div class="field"><label for="empFirstName">First Name</label><input id="empFirstName" placeholder="First name" autocomplete="given-name" required></div>
               <div class="field"><label for="empLastName">Last Name</label><input id="empLastName" placeholder="Last name" autocomplete="family-name" required></div>
               <div class="field"><label for="empId">Employee ID</label><input id="empId" placeholder="Auto-generated" readonly aria-readonly="true" class="readonly-field"></div>
               <div class="field"><label for="empHireDate">Date Started</label><input id="empHireDate" type="date" required></div>
               <div class="field"><label for="empType">Employment Type</label><select id="empType"><option value="full">Full Time — ₱250/day</option><option value="semi">Semi Full Time — ₱200/day</option><option value="part">Part Time — ₱150/day</option></select></div>
-              <div class="field"><label for="empSite">Assigned Site</label><select id="empSite" required><option value="site1">Site 1 — 14.118861, 122.950854</option><option value="site2">Site 2 — 14.0956367, 122.9469572</option><option value="site3">Site 3 — 14.091233, 122.9467024</option></select></div>
               <div class="field"><label for="empStart">Scheduled Start</label><input id="empStart" type="time" value="08:00" required></div>
               <div class="field employee-add-field"><label>&nbsp;</label><button type="submit" class="add-employee-btn">ADD EMPLOYEE &amp; ENROLL FACE</button></div>
             </form>
@@ -149,17 +148,19 @@
   <div class="dashboard-card report-transactions-card"><div class="card-heading"><div><h2 id="reportTableTitle">Daily Sales Transactions</h2><span id="reportTableSubtitle" class="muted">Selected date</span></div><button type="button" class="small-action" id="reportExportBtn">EXPORT CSV</button></div><div id="reportOutput"></div></div>
   <div class="dashboard-card"><div class="card-heading"><div><h2>Monthly Employee Sales</h2><span class="muted">Accumulated sales by employee for the selected month.</span></div></div><div id="reportMonthlyEmployees"></div></div>
 </section>
-        <section id="settings" class="tab-panel hidden">
-  <div class="card inner">
-    <div class="section-kicker">ATTENDANCE SETTINGS</div>
-    <h2>Employee Days Off</h2>
-    <p class="muted">Set the regular days off for each employee. Days marked OFF are not treated as Absence and do not generate pay.</p>
-    <div class="settings-form-grid">
-      <div class="field"><label for="settingsEmployee">Employee</label><select id="settingsEmployee"><option value="">Select Employee</option></select></div>
+        <section id="schedules" class="tab-panel hidden">
+  <div class="card inner schedule-manager-card">
+    <div class="section-kicker">WEEKLY SITE SCHEDULE</div>
+    <h2>Schedules</h2>
+    <p class="muted">Set where each employee is scheduled for every day. The employee's DTR site is automatically based on today's schedule. Face scan and attendance are only valid when the employee is physically at the site scheduled for that day.</p>
+    <div class="settings-form-grid schedule-select-grid">
+      <div class="field"><label for="scheduleEmployee">Employee</label><select id="scheduleEmployee"><option value="">Select Employee</option></select></div>
       <div class="field"><label>Regular Days Off</label><div id="employeeOffDays" class="off-days-grid"></div></div>
       <div class="settings-actions"><button type="button" id="saveOffDays" class="small-action">SAVE DAYS OFF</button></div>
     </div>
     <div id="offDaysSummary" class="off-days-summary"></div>
+    <div class="schedule-editor-wrap"><div id="scheduleEditor" class="schedule-editor"></div></div>
+    <div class="schedule-board-wrap"><div class="section-kicker">SITE ROSTER</div><p class="muted">Weekly view by Site 1, Site 2, and Site 3.</p><div id="scheduleRoster" class="schedule-roster"></div></div>
   </div>
 </section>
       </div>
