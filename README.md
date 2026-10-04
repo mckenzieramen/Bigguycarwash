@@ -23,3 +23,6 @@ Example: Full-time + ₱350 sales + normal attendance:
 350 × 40% = ₱140, so pay remains ₱250.
 
 For production, replace the demo admin credentials with Firebase Authentication and store employee/DTR/sales records in Firestore with security rules.
+
+
+V82: Schedule Week/Date now selects the calendar week, saved weeks can be viewed/edited, and unsaved future weeks are blank dropdown grids. Existing DTR/time data is preserved.

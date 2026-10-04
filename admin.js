@@ -334,9 +334,18 @@ function syncRosterDuplicateDay(changed){
  }
  refreshRosterDayAvailability(day);
 }
+function hasSavedScheduleForWeek(weekOf){
+ const key=mondayOfWeek(weekOf||today());
+ return state.employees.some(e=>{
+   const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?e.weeklySchedules:{};
+   return Object.prototype.hasOwnProperty.call(weekly,key) && weekly[key] && typeof weekly[key]==="object";
+ });
+}
 function renderSchedules(){
  const weekInput=$("scheduleWeekOf");
- if(weekInput && !weekInput.value)weekInput.value=mondayOfWeek(today());
+ if(weekInput && !weekInput.value)weekInput.value=state.scheduleWeekOf||today();
+ const weekOf=mondayOfWeek(weekInput?.value||state.scheduleWeekOf||today());
+ scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
  renderScheduleRoster();
 }
 async function saveRosterSchedule(){
@@ -386,8 +395,8 @@ async function saveRosterSchedule(){
 }
 function renderScheduleRoster(){
  const root=$("scheduleRoster");if(!root)return;
- const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||state.scheduleWeekOf||today());
- if($("scheduleWeekOf"))$("scheduleWeekOf").value=weekOf;
+ const selectedDate=$("scheduleWeekOf")?.value||state.scheduleWeekOf||today();
+ const weekOf=mondayOfWeek(selectedDate);
  const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
  const dayColors={Monday:"mon",Tuesday:"tue",Wednesday:"wed",Thursday:"thu",Friday:"fri",Saturday:"sat",Sunday:"sun"};
  const siteOrder=["site1","site2","site3","off"];
@@ -1051,7 +1060,12 @@ $("dtrEmployeeSelect")?.addEventListener("change",e=>{
 $("payrollMonth")?.addEventListener("change",renderPayroll);
 $("salesViewDate")?.addEventListener("change",()=>renderSalesPage("daily"));
 $("attendanceDate")?.addEventListener("change",()=>renderAttendanceAdmin(attendanceDateValue()));
-$("scheduleWeekOf")?.addEventListener("change",()=>{ if($("scheduleWeekOf")) $("scheduleWeekOf").value=mondayOfWeek($("scheduleWeekOf").value||today()); renderScheduleRoster(); });
+$("scheduleWeekOf")?.addEventListener("change",()=>{
+ const selected=$("scheduleWeekOf")?.value||today();
+ const weekOf=mondayOfWeek(selected);
+ scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
+ renderScheduleRoster();
+});
 $("saveRosterSchedule")?.addEventListener("click",saveRosterSchedule);
 
 $("reportDate").value=today();
