@@ -80,11 +80,31 @@ function updateEmployeeIdPreview(){
  const input=$("empId");
  if(input)input.value=date?nextEmployeeId(date):"";
 }
-const baseRate=t=>t==="full"?250:t==="semi"?200:150;
+function employeeTypeKey(t){
+ const v=String(t||"").trim().toLowerCase().replace(/[\s_-]+/g,"");
+ if(v==="full"||v==="fulltime")return "full";
+ if(v==="semi"||v==="semifull"||v==="semifulltime")return "semi";
+ if(v==="part"||v==="parttime")return "part";
+ return v;
+}
+function employeeTypeLabel(t){
+ const k=employeeTypeKey(t);
+ if(k==="full")return "Full Time";
+ if(k==="semi")return "Semi Full Time";
+ if(k==="part")return "Part Time";
+ return String(t||"").trim()||"—";
+}
+const baseRate=t=>{
+ const type=typeof t==="object"&&t?t.type:t;
+ const manual=typeof t==="object"&&t?Number(t.dailyRate):NaN;
+ if(Number.isFinite(manual)&&manual>=0)return manual;
+ const k=employeeTypeKey(type);
+ return k==="full"?250:k==="semi"?200:150;
+};
 const commRate=s=>{const v=String(s||"awol").toLowerCase().replace(/[\s_-]+/g,"");if(v==="late")return .35;if(v==="awol"||v==="absent")return .30;return .40;};
 function table(rows,heads){if(!rows.length)return'<p class="muted">No records yet.</p>';return`<table class="table"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
 function isWorkedAttendance(a){return !!(a&&a.clockIn&&a.status&&!["absent","awol","off"].includes(String(a.status).toLowerCase()));}
-function pay(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;const sales=state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);return Math.max(baseRate(emp.type),sales*commRate(a.status))}
+function pay(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;const sales=state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0),0);return Math.max(baseRate(emp),sales*commRate(a.status))}
 function commissionFor(emp,date){const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===date);if(!isWorkedAttendance(a))return 0;return state.sales.filter(x=>String(x.employeeId)===String(emp.id)&&x.date===date).reduce((t,x)=>t+Number(x.amount||0)*commRate(a.status),0)}
 function statusBadge(status){
  const s=(status||"AWOL").toLowerCase();
@@ -149,7 +169,7 @@ function refreshRightPanel(){
  }
  const a=records[0],e=capturedEmployee|| (a?state.employees.find(x=>x.id===a.employeeId):state.employees[0]);
  const title=$("rightStatusTitle"),text=$("rightStatusText"),notice=$("rightNoticeTitle"),noticeText=$("rightNoticeText");
- if(e){const attendance=a&&a.employeeId===e.id?a:state.attendance.find(x=>x.employeeId===e.id&&x.date===d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}
+ if(e){const attendance=a&&a.employeeId===e.id?a:state.attendance.find(x=>x.employeeId===e.id&&x.date===d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=employeeTypeLabel(e.type);$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}
 }
 function renderAttendanceAdmin(date){
  const target=date||today();
@@ -227,7 +247,7 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*commRate(a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
@@ -238,7 +258,7 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  renderPayroll();
  const top=state.employees.map(e=>({name:e.name,sales:state.sales.filter(s=>s.date===d&&s.employeeId===e.id).reduce((t,s)=>t+Number(s.amount||0),0)})).filter(x=>x.sales>0).sort((a,b)=>b.sales-a.sales);
  $("topSalesToday").innerHTML=table(top.slice(0,6).map((x,i)=>[i+1,x.name,money(x.sales)]),["#","Employee","Sales"]);
- const types={full:"Full Time",semi:"Semi Full Time",part:"Part Time"}; const counts={};state.employees.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);$("employeeTypeSummary").innerHTML=table(Object.keys(counts).map(k=>[types[k]||k,counts[k]]),["Type","Count"]);
+ const counts={};state.employees.forEach(e=>{const label=employeeTypeLabel(e.type);counts[label]=(counts[label]||0)+1;});$("employeeTypeSummary").innerHTML=table(Object.keys(counts).map(k=>[k,counts[k]]),["Type","Count"]);
  $("recentSales").innerHTML=table(state.sales.slice().reverse().slice(0,6).map(s=>[new Date((s.date||d)+"T"+(s.time||"12:00") ).toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"}),s.note||"Carwash",money(s.amount)]),["Time","Service","Amount"]);
  refreshDashboardCharts();refreshRightPanel();if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');if(!$('reports').classList.contains('hidden'))makeReport(currentReportView);
 }
@@ -312,7 +332,9 @@ $("employeeForm").onsubmit=async e=>{
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
-   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,offDays:[]};
+   const dailyRate=Number($("empDailyRate").value);
+   if(!Number.isFinite(dailyRate)||dailyRate<0){alert("Please enter a valid Base Pay / Day.");return;}
+   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,dailyRate,offDays:[]};
    state.employees.push(employee);
    cacheState();
    if(window.BigGuysCloud?.saveEmployee){
@@ -565,7 +587,7 @@ function renderEmployeeDtr(id){
  const rate=isWorkedAttendance(todayRecord)?commRate(todayRecord.status):0;
  const commission=isWorkedAttendance(todayRecord)?todaySales*rate:0;
  const totalSalary=rows.reduce((t,a)=>t+pay(e,a.date),0);
- const type=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";
+ const type=employeeTypeLabel(e.type);
  const history=rows.length?rows.map(a=>{
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
    const r=commRate(a.status||"awol");

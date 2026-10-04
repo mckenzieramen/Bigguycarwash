@@ -8,3 +8,13 @@ V51 - DTR PASSWORD PROTECTION CORRECTION
 - Closing the tab/browser ends the session, so the DTR password is required again.
 - DTR scanner/camera does not initialize until access is unlocked.
 - Existing face recognition, attendance, Firebase, payroll, sales and reports logic preserved.
+
+V51 LOCKED BASELINE: Admin/DTR/Face Scan/Sales/Payroll/Reports/Settings functionality locked before V52 mobile layout work.
+V52: Mobile dashboard content now uses horizontal touch scrolling; desktop layout unchanged. No business logic changed.
+
+V53 — Manual Employee Type Input
+- Employee Type in Add Employee is now a manual text field with optional suggestions for Full Time, Semi Full Time, and Part Time.
+- Existing saved type values remain supported.
+- Payroll minimum-pay logic normalizes typed Full Time/Semi Full Time/Part Time values so existing ₱250/₱200/₱150 rules remain intact.
+- Employee type labels in dashboard/right panel/summary continue to display cleanly.
+- No unrelated DTR, face recognition, Firebase, sales, payroll, reports, or mobile layout logic changed.
