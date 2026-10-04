@@ -266,39 +266,24 @@ async function saveEmployeeOffDays(){
    alert(`Unable to save days off: ${err?.code||err?.message||err}`);
  }
 }
-function scrollContainerKey(el,i=0){
- const host=el.closest('[id]');
- if(el.dataset.scrollKey)return el.dataset.scrollKey;
- if(el.id)return `id:${el.id}`;
- if(host?.id)return `host:${host.id}:${el.className||''}`;
- const cls=String(el.className||'').replace(/\s+/g,'-');
- return `scroll:${cls}:${i}`;
-}
-function getHorizontalScrollContainers(){
- const seen=new Set(),out=[];
- ['.table-scroll','.dtr-table-wrap','.report-box','.sales-period-table','#employeeTable'].forEach(sel=>document.querySelectorAll(sel).forEach(el=>{
-   if(seen.has(el)||el.scrollWidth<=el.clientWidth)return;
-   seen.add(el);out.push(el);
- }));
- return out;
-}
 function preserveTableScrollPositions(){
  const positions={};
- getHorizontalScrollContainers().forEach((el,i)=>{const key=scrollContainerKey(el,i);el.dataset.scrollKey=key;positions[key]=el.scrollLeft;});
+ document.querySelectorAll('.table-scroll').forEach((el,i)=>{
+   const host=el.parentElement;
+   const key=host?.id || el.dataset.scrollKey || `table-scroll-${i}`;
+   positions[key]=el.scrollLeft;
+ });
  return positions;
 }
 function restoreTableScrollPositions(positions){
  if(!positions)return;
- const restore=()=>getHorizontalScrollContainers().forEach((el,i)=>{const key=scrollContainerKey(el,i);if(Object.prototype.hasOwnProperty.call(positions,key)){const x=positions[key];el.scrollLeft=x;requestAnimationFrame(()=>{el.scrollLeft=x;});}});
- restore();requestAnimationFrame(restore);setTimeout(restore,60);
-}
-function bindHorizontalScrollPersistence(){
- getHorizontalScrollContainers().forEach((el,i)=>{
-   const key=scrollContainerKey(el,i);el.dataset.scrollKey=key;
-   if(el.dataset.scrollPersistenceBound==='1')return;
-   el.dataset.scrollPersistenceBound='1';
-   el.addEventListener('scroll',()=>{try{sessionStorage.setItem('bigguys_scroll_'+key,String(el.scrollLeft));}catch(e){}},{passive:true});
-   try{const saved=Number(sessionStorage.getItem('bigguys_scroll_'+key));if(Number.isFinite(saved)&&saved>0)requestAnimationFrame(()=>{el.scrollLeft=saved;});}catch(e){}
+ document.querySelectorAll('.table-scroll').forEach((el,i)=>{
+   const host=el.parentElement;
+   const key=host?.id || el.dataset.scrollKey || `table-scroll-${i}`;
+   if(Object.prototype.hasOwnProperty.call(positions,key)){
+     const x=positions[key];
+     requestAnimationFrame(()=>{el.scrollLeft=x;});
+   }
  });
 }
 function refresh(){
@@ -321,7 +306,6 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  wrapAllTableScrolls();
- bindHorizontalScrollPersistence();
  renderPayroll();
  const top=state.employees.map(e=>({name:e.name,sales:state.sales.filter(s=>s.date===d&&s.employeeId===e.id).reduce((t,s)=>t+Number(s.amount||0),0)})).filter(x=>x.sales>0).sort((a,b)=>b.sales-a.sales);
  $("topSalesToday").innerHTML=table(top.slice(0,6).map((x,i)=>[i+1,x.name,money(x.sales)]),["#","Employee","Sales"]);
@@ -329,7 +313,6 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  $("recentSales").innerHTML=table(state.sales.slice().reverse().slice(0,6).map(s=>[new Date((s.date||d)+"T"+(s.time||"12:00") ).toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"}),s.note||"Carwash",money(s.amount)]),["Time","Service","Amount"]);
  refreshDashboardCharts();refreshRightPanel();if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');if(!$('reports').classList.contains('hidden'))makeReport(currentReportView);
  restoreTableScrollPositions(__scrollPositions);
- bindHorizontalScrollPersistence();
 }
 async function loadModels(){
  if(modelsReady)return true;
@@ -853,14 +836,7 @@ function renderSalesPage(mode='daily'){
  if($("salesTable"))$("salesTable").innerHTML=rows.length?table(rows.slice().reverse().map(s=>{const expected=Number(s.amount||0)-Number(s.expense||0),v=Number(s.remittance||0)-expected;return[s.time||'—',state.employees.find(e=>String(e.id)===String(s.employeeId))?.name||s.employeeId,money(s.amount),money(s.expense||0),money(expected),money(s.remittance||0),v<0?`<span class="cash-short">Short ${money(Math.abs(v))}</span>`:v>0?`<span class="cash-over">Over ${money(v)}</span>`:'—',s.category||'—'];}),["Date/Time","Employee","Sales","Expenses","Expected","Remitted","Over / Short","Service"]):'<p class="muted">No sales logged for this date.</p>';
 }
 function exportCurrentTable(kind){const source=kind==='sales'?$("salesPeriodTable")||$("salesRecentTransactions"):$("reportOutput");const tableEl=source?.querySelector('table');if(!tableEl){alert('No table data to export.');return;}const csv=[...tableEl.rows].map(r=>[...r.cells].map(c=>'"'+c.textContent.replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`big-guys-${kind}-${today()}.csv`;a.click();URL.revokeObjectURL(url);}
-$("dtrEmployeeSelect")?.addEventListener("change",e=>{
- selectedDtrEmployeeId=e.target.value||"";
- renderEmployeeDtr(selectedDtrEmployeeId);
- requestAnimationFrame(()=>{
-   const box=$("employeeDtrProfile");
-   if(box && selectedDtrEmployeeId) box.scrollIntoView({behavior:"smooth",block:"nearest"});
- });
-});
+$("dtrEmployeeSelect")?.addEventListener("change",e=>{selectedDtrEmployeeId=e.target.value||"";renderEmployeeDtr(selectedDtrEmployeeId);});
 $("payrollMonth")?.addEventListener("change",renderPayroll);
 $("salesViewDate")?.addEventListener("change",()=>renderSalesPage("daily"));
 $("attendanceDate")?.addEventListener("change",()=>renderAttendanceAdmin(attendanceDateValue()));
