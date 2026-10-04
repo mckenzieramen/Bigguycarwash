@@ -266,7 +266,28 @@ async function saveEmployeeOffDays(){
    alert(`Unable to save days off: ${err?.code||err?.message||err}`);
  }
 }
+function preserveTableScrollPositions(){
+ const positions={};
+ document.querySelectorAll('.table-scroll').forEach((el,i)=>{
+   const host=el.parentElement;
+   const key=host?.id || el.dataset.scrollKey || `table-scroll-${i}`;
+   positions[key]=el.scrollLeft;
+ });
+ return positions;
+}
+function restoreTableScrollPositions(positions){
+ if(!positions)return;
+ document.querySelectorAll('.table-scroll').forEach((el,i)=>{
+   const host=el.parentElement;
+   const key=host?.id || el.dataset.scrollKey || `table-scroll-${i}`;
+   if(Object.prototype.hasOwnProperty.call(positions,key)){
+     const x=positions[key];
+     requestAnimationFrame(()=>{el.scrollLeft=x;});
+   }
+ });
+}
 function refresh(){
+ const __scrollPositions=preserveTableScrollPositions();
  syncStateFromStorage();
  const d=today(),ds=state.sales.filter(x=>x.date===d),totalSales=ds.reduce((t,x)=>t+Number(x.amount||0),0);
  if($("salesTotal"))$("salesTotal").textContent=money(totalSales);
@@ -291,6 +312,7 @@ document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>delet
  const types={full:"Full Time",semi:"Semi Full Time",part:"Part Time"}; const counts={};state.employees.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);$("employeeTypeSummary").innerHTML=table(Object.keys(counts).map(k=>[types[k]||k,counts[k]]),["Type","Count"]);
  $("recentSales").innerHTML=table(state.sales.slice().reverse().slice(0,6).map(s=>[new Date((s.date||d)+"T"+(s.time||"12:00") ).toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"}),s.note||"Carwash",money(s.amount)]),["Time","Service","Amount"]);
  refreshDashboardCharts();refreshRightPanel();if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');if(!$('reports').classList.contains('hidden'))makeReport(currentReportView);
+ restoreTableScrollPositions(__scrollPositions);
 }
 async function loadModels(){
  if(modelsReady)return true;
