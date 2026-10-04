@@ -1,5 +1,13 @@
 const KEY="bigguys_dtr_v2";
 const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
+function employeeSiteId(employee){return employee?.siteId||"";}
+function employeeSiteName(employee){const s=window.BIGGUYS_DTR_SITES?.[employeeSiteId(employee)];return s?.name||"Unassigned Site";}
+async function verifyEmployeeSite(employee){
+ const siteId=employeeSiteId(employee);
+ if(!siteId||!window.BIGGUYS_DTR_SITES?.[siteId])return false;
+ if(window.BIGGUYS_DTR_IS_AT_SITE)return await window.BIGGUYS_DTR_IS_AT_SITE(siteId);
+ return false;
+}
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{}}');
 let stream=null, modelsReady=false, recognizedEmployee=null, scanning=false, validSince=0, captureBusy=false, recordBusy=false, recognitionToastTimer=null, nextRecognitionAt=0;
 const $=id=>document.getElementById(id);
@@ -108,6 +116,13 @@ function updateAttendanceControls(employee){
 async function verifyFace(detection){
  const match=bestEmployee(detection.descriptor);
  if(match.employee&&match.distance<=.60){
+  const atAssignedSite=await verifyEmployeeSite(match.employee);
+  if(!atAssignedSite){
+   recognizedEmployee=null;
+   resetRecognition(`${match.employee.name} is assigned to ${employeeSiteName(match.employee)}. You are not at the employee's assigned site.`);
+   setOval("bad");
+   return;
+  }
   recognizedEmployee=match.employee;
   nextRecognitionAt=performance.now()+2000;
   saveFaceSnapshot(match.employee,detection);
@@ -184,6 +199,11 @@ async function record(type){
  if(!recognizedEmployee){$("result").innerHTML='<div class="result late-result">Face not recognized.</div>';return}
  const employee=recognizedEmployee;
  const date=today(), nowDate=new Date(), now=timeNow(), iso=nowDate.toISOString();
+ if(!(await verifyEmployeeSite(employee))){
+  $("result").innerHTML=`<div class="result late-result">LOCATION NOT AUTHORIZED<br><br>${employee.name} is assigned to ${employeeSiteName(employee)}.<br>Please move to the assigned site before recording attendance.</div>`;
+  clearAfterAttendance("🔴 Wrong location — attendance is blocked for this employee.");
+  return;
+ }
  let attendance=findTodayAttendance(employee.id,date);
  recordBusy=true;
  $("timeIn").disabled=true; $("timeOut").disabled=true;

@@ -53,6 +53,12 @@ function syncStateFromStorage(){
 const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth()+1).padStart(2,"0"),d=String(n.getDate()).padStart(2,"0");return `${y}-${m}-${d}`};
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const DTR_SITES={
+ site1:{name:"Site 1",lat:14.118861,lng:122.950854,radius:250},
+ site2:{name:"Site 2",lat:14.0956367,lng:122.9469572,radius:250},
+ site3:{name:"Site 3",lat:14.091233,lng:122.9467024,radius:250}
+};
+function siteLabel(id){return DTR_SITES[id]?.name||"Unassigned";}
 function employeeOffDays(e){return Array.isArray(e?.offDays)?e.offDays:[];}
 function isEmployeeOff(e,date){if(!e||!date)return false;return employeeOffDays(e).includes(WEEKDAYS[new Date(date+"T00:00:00").getDay()]);}
 function isBeforeHire(e,date){return !!(e?.hireDate&&date<e.hireDate);}
@@ -312,9 +318,10 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,siteLabel(e.siteId),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="edit-site-employee" data-id="${e.id}">EDIT SITE</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Site","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
+document.querySelectorAll(".edit-site-employee").forEach(btn=>btn.onclick=()=>editEmployeeSite(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
  renderSettings();
@@ -401,7 +408,7 @@ $("employeeForm").onsubmit=async e=>{
    },'admin');
    const hireDate=$("empHireDate").value||today();
    const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
-   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,offDays:[]};
+   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,siteId:$("empSite")?.value||"site1",offDays:[]};
    state.employees.push(employee);
    cacheState();
    if(window.BigGuysCloud?.saveEmployee){
@@ -412,6 +419,7 @@ $("employeeForm").onsubmit=async e=>{
    }
    e.target.reset();
    $("empStart").value='08:00';
+   $("empSite").value='site1';
    $("empHireDate").value=today();
    updateEmployeeIdPreview();
    refresh();
@@ -655,14 +663,19 @@ function renderEmployeeDtr(id){
  const commission=isWorkedAttendance(todayRecord)?todaySales*rate:0;
  const totalSalary=rows.reduce((t,a)=>t+pay(e,a.date),0);
  const type=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";
- const history=rows.length?rows.map(a=>{
+ const monthKeys=[...new Set(rows.map(a=>String(a.date||"").slice(0,7)).filter(Boolean))].sort();
+ const recentMonth=monthKeys[monthKeys.length-1]||today().slice(0,7);
+ const recentMonthRows=rows.filter(a=>String(a.date||"").startsWith(recentMonth));
+ const recentLabel=new Date(recentMonth+"-01T00:00:00").toLocaleDateString("en-PH",{month:"long",year:"numeric"});
+ const history=recentMonthRows.length?recentMonthRows.map(a=>{
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===a.date).reduce((t,x)=>t+Number(x.amount||0),0);
-   const r=effectiveCommissionRate(e,date,a.status||"awol");
+   const r=effectiveCommissionRate(e,a.date,a.status||"awol");
    return [dateLabel(a.date),e.start||"—",a.clockIn||"—",a.clockOut||"—",dtrHours(a),money(sales),`${Math.round(r*100)}%`,money(isWorkedAttendance(a)?sales*r:0),statusBadge(a.status||"awol")];
  }):[];
  box.className="employee-dtr-profile";
- box.innerHTML=`<div class="dtr-employee-header"><div class="dtr-avatar">${(e.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div class="dtr-employee-main"><span class="section-kicker">EMPLOYEE DTR PROFILE</span><h3>${e.name}</h3><p>${e.id} · ${type} · Schedule ${e.start||"—"}</p></div><button type="button" class="dtr-print" onclick="window.print()">PRINT DTR</button></div>
+ box.innerHTML=`<div class="dtr-employee-header"><div class="dtr-avatar">${(e.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div class="dtr-employee-main"><span class="section-kicker">EMPLOYEE DTR PROFILE</span><h3>${e.name}</h3><p>${e.id} · ${type} · ${siteLabel(e.siteId)} · Schedule ${e.start||"—"}</p></div><button type="button" class="dtr-print" onclick="window.print()">PRINT DTR</button></div>
  <div class="dtr-kpi-grid"><div class="dtr-kpi"><span>TIME IN TODAY</span><b>${todayRecord?.clockIn||"—"}</b><small>${todayRecord?statusBadge(todayRecord.status||"awol"):"No record yet"}</small></div><div class="dtr-kpi"><span>TIME OUT TODAY</span><b>${todayRecord?.clockOut||"—"}</b><small>${todayRecord?.clockOut?dtrHours(todayRecord):"Pending"}</small></div><div class="dtr-kpi"><span>TODAY'S SALES</span><b>${money(todaySales)}</b><small>Commission ${Math.round(rate*100)}%</small></div><div class="dtr-kpi"><span>TOTAL SALES</span><b>${money(totalSales)}</b><small>${rows.length} attendance record${rows.length===1?"":"s"}</small></div><div class="dtr-kpi"><span>TOTAL HOURS</span><b>${(totalMinutes/60).toFixed(2)}</b><small>Completed shifts</small></div><div class="dtr-kpi"><span>TOTAL SALARY</span><b>${money(totalSalary)}</b><small>Higher of minimum pay or commission</small></div><div class="dtr-kpi"><span>TODAY COMMISSION</span><b>${money(commission)}</b><small>${Math.round(rate*100)}% of today's sales</small></div></div>
+ <div class="dtr-recent-month"><span class="section-kicker">RECENT MONTH</span><strong>${recentLabel}</strong><span class="muted">Showing the latest month with DTR records for this employee.</span></div>
  <div class="dtr-table-wrap">${history.length?table(history,["DATE","SCHEDULE","TIME IN","TIME OUT","HOURS","SALES","COMMISSION %","COMMISSION","STATUS"]):'<p class="muted dtr-no-records">No DTR history for this employee yet.</p>'}</div>`;
 }
 function refreshDtrSelector(){
@@ -688,6 +701,20 @@ function showEmployeeHistory(id){
    $("closeHistory").onclick=()=>box.classList.add("hidden");
    box.scrollIntoView({behavior:"smooth",block:"nearest"});
  }
+}
+async function editEmployeeSite(id){
+ const e=state.employees.find(x=>String(x.id)===String(id));
+ if(!e)return;
+ const current=e.siteId||"site1";
+ const value=prompt(`Assigned site for ${e.name}:\n\n1 = Site 1\n2 = Site 2\n3 = Site 3\n\nEnter 1, 2, or 3.`, current.replace("site",""));
+ if(value===null)return;
+ const siteId=`site${String(value).trim()}`;
+ if(!DTR_SITES[siteId]){alert("Invalid site. Please choose 1, 2, or 3.");return;}
+ e.siteId=siteId;
+ try{
+   if(window.BigGuysCloud?.saveEmployee)state=await window.BigGuysCloud.saveEmployee(e);else await syncAdminNow();
+   cacheState();refresh();
+ }catch(err){console.error("Employee site update failed",err);alert(`Unable to save site: ${err?.code||err?.message||err}`);}
 }
 async function deleteEmployee(id){
  const employee=state.employees.find(e=>e.id===id);
