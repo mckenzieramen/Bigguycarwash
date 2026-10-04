@@ -185,3 +185,16 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .site-roster-select:focus{border-color:#2e9cff;box-shadow:0 0 0 2px #2e9cff22}
 .site-roster-cell.has-name{background:linear-gradient(180deg,#0a2033,#071827)}
 @media(max-width:700px){.schedule-date-help{font-size:10px}.site-roster-grid{grid-template-columns:38px repeat(7,minmax(118px,1fr));min-width:865px}.site-roster-select{font-size:11px;min-width:112px}}
+
+/* V75: keep the #/row-number column aligned and pinned to the side while the 7 day columns scroll. */
+.site-roster-grid{display:block;min-width:900px;width:100%;}
+.site-roster-header,.site-roster-row{display:grid;grid-template-columns:44px repeat(7,minmax(120px,1fr));width:100%;}
+.site-roster-header .site-roster-corner,.site-roster-row .site-roster-num{position:sticky;left:0;z-index:5;}
+.site-roster-header .site-roster-corner{background:#081a2a;box-shadow:2px 0 0 #173149;}
+.site-roster-row .site-roster-num{background:#071827;box-shadow:2px 0 0 #173149;}
+.site-roster-header{position:relative;z-index:2;}
+.site-roster-day.sun{background:#808080;color:#fff;}
+@media(max-width:700px){
+ .site-roster-grid{min-width:865px;}
+ .site-roster-header,.site-roster-row{grid-template-columns:38px repeat(7,minmax(118px,1fr));}
+}
