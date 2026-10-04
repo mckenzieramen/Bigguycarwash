@@ -340,8 +340,27 @@ function syncRosterDuplicateDay(changed){
  }
  refreshRosterDayAvailability(day);
 }
+function persistScheduleDrafts(){
+  try{
+    state.scheduleDrafts=state.scheduleDrafts&&typeof state.scheduleDrafts==="object"?state.scheduleDrafts:{};
+    localStorage.setItem("bigguys_schedule_drafts",JSON.stringify(state.scheduleDrafts));
+  }catch(err){ console.warn("Schedule draft local save skipped:",err); }
+}
+function loadScheduleDrafts(){
+  try{
+    const raw=localStorage.getItem("bigguys_schedule_drafts");
+    const parsed=raw?JSON.parse(raw):{};
+    return parsed&&typeof parsed==="object"?parsed:{};
+  }catch(err){ return {}; }
+}
+function preserveScheduleDrafts(){
+  const memory=state.scheduleDrafts&&typeof state.scheduleDrafts==="object"?state.scheduleDrafts:{};
+  const stored=loadScheduleDrafts();
+  return {...stored,...memory};
+}
 function scheduleDraftForWeek(weekOf){
  const key=mondayOfWeek(weekOf||today());
+ if(!state.scheduleDrafts||typeof state.scheduleDrafts!=="object")state.scheduleDrafts=loadScheduleDrafts();
  const draft=state.scheduleDrafts?.[key];
  return draft&&typeof draft==="object"?draft:null;
 }
@@ -1328,7 +1347,7 @@ $("reportPrintBtn")?.addEventListener('click',()=>window.print());$("salesPrintB
 
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;const localDrafts=preserveScheduleDrafts();state=remote;state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts};persistScheduleDrafts();cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
-async function initCloud(){ if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ const localDrafts=preserveScheduleDrafts(); state=remote; state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts}; persistScheduleDrafts(); cacheState(); scheduleModeInitialized=false; if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
+async function initCloud(){ state.scheduleDrafts={...loadScheduleDrafts(),...(state.scheduleDrafts||{})}; if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ const localDrafts=preserveScheduleDrafts(); state=remote; state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts}; persistScheduleDrafts(); cacheState(); scheduleModeInitialized=false; if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
 setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); window.addEventListener("load",initCloud);
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));
