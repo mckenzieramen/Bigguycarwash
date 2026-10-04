@@ -1062,9 +1062,25 @@ ensureAutomaticAbsences();
 let salesDayKey=today();setInterval(()=>{const d=today();if(d!==salesDayKey){salesDayKey=d;ensureAutomaticAbsences();if($("salesViewDate"))$("salesViewDate").value=d;if(!$('sales').classList.contains('hidden'))renderSalesPage('daily');}},1000);
 $("payrollMonth").value=today().slice(0,7);
 
-function startClock(){
- const tick=()=>{const n=new Date();const time=n.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit",second:"2-digit"});const date=n.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric",year:"numeric"});const day=n.toLocaleDateString("en-PH",{weekday:"long"});const long=n.toLocaleDateString("en-PH",{month:"long",day:"numeric",year:"numeric"});if($("digitalClock"))$("digitalClock").textContent=time;if($("rightDate"))$("rightDate").textContent=date;if($("headerDay"))$("headerDay").textContent=day;if($("headerDate"))$("headerDate").textContent=long};tick();clearInterval(window.bigGuysClock);window.bigGuysClock=setInterval(tick,1000);
+function updateAdminClock(){
+ const n=new Date();
+ const time=n.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit",second:"2-digit"});
+ const date=n.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
+ const day=n.toLocaleDateString("en-PH",{weekday:"long"});
+ const long=n.toLocaleDateString("en-PH",{month:"long",day:"numeric",year:"numeric"});
+ if($("digitalClock"))$("digitalClock").textContent=time;
+ if($("rightDate"))$("rightDate").textContent=date;
+ if($("headerDay"))$("headerDay").textContent=day;
+ if($("headerDate"))$("headerDate").textContent=long;
 }
+function startClock(){
+ clearInterval(window.bigGuysClock);
+ updateAdminClock();
+ window.bigGuysClock=setInterval(updateAdminClock,1000);
+}
+// Keep the admin clock/date live even after tab restore, browser sleep, or visibility changes.
+startClock();
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)startClock();});
 function activateTab(tab){
  document.querySelectorAll(".side-nav[data-tab]").forEach(x=>x.classList.toggle("active",x.dataset.tab===tab));
  document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));

@@ -32,8 +32,10 @@ function findTodayAttendance(employeeId,date=today()){
  const rows=(state.attendance||[]).filter(a=>String(a.employeeId)===String(employeeId)&&a.date===date&&(a.clockIn||a.clockOut));
  return rows.sort((a,b)=>String(a.clockInAt||a.clockIn||"").localeCompare(String(b.clockInAt||b.clockIn||"")))[0]||null;
 }
-function tick(){const n=new Date();$("liveTime").textContent=n.toLocaleTimeString("en-PH",{hour12:true});$("liveDate").textContent=n.toLocaleDateString("en-PH",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
-setInterval(tick,1000);tick();
+function updateDtrClock(){const n=new Date();if($("liveTime"))$("liveTime").textContent=n.toLocaleTimeString("en-PH",{hour12:true});if($("liveDate"))$("liveDate").textContent=n.toLocaleDateString("en-PH",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
+function startDtrClock(){clearInterval(window.bigGuysDtrClock);updateDtrClock();window.bigGuysDtrClock=setInterval(updateDtrClock,1000);}
+startDtrClock();
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)startDtrClock();});
 function setOval(status){const oval=$("ovalFrame");oval.classList.remove("oval-red","oval-green");oval.classList.add(status==="good"?"oval-green":"oval-red")}
 function resetRecognition(message="Place your face inside the oval."){recognizedEmployee=null;validSince=0;captureBusy=false;if(recognitionToastTimer){clearTimeout(recognitionToastTimer);recognitionToastTimer=null;}$("cameraStatus").textContent=message;$("recognized").classList.add("hidden");$("timeIn").disabled=true;$("timeOut").disabled=true}
 async function loadModels(){
