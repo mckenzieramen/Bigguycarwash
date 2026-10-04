@@ -857,8 +857,24 @@ function renderBusinessSummary(){
  const dates=reportDates();const all=state.sales;const expenses=dates.reduce((t,d)=>t+totalExpensesForDate(d),0);const payroll=dates.reduce((t,d)=>t+state.employees.reduce((z,e)=>z+(state.attendance.some(a=>a.date===d&&a.employeeId===e.id)?pay(e,d):0),0),0);const f={totalSale:sumSales(all),cash:dates.reduce((t,d)=>t+Number(state.dailyReports?.[d]?.cash||0),0),expenses,cashRemitted:dates.reduce((t,d)=>t+Number(state.dailyReports?.[d]?.cashRemitted||0),0),payroll};renderReportSummary(f,all);$("reportSalesBreakdown").innerHTML=breakdownHTML(Object.entries(all.reduce((o,s)=>{const k=s.category||(/detail/i.test(s.note||"")?'Detailing':/wax/i.test(s.note||"")?'Wax':/carwash|wash/i.test(s.note||"")?'Carwash':'Other');o[k]=(o[k]||0)+Number(s.amount||0);return o},{})).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));$("reportPaymentBreakdown").innerHTML=breakdownHTML(Object.entries(all.reduce((o,s)=>{const k=s.paymentMethod||'Cash';o[k]=(o[k]||0)+Number(s.amount||0);return o},{})).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value));$("reportTableTitle").textContent='Business Summary';$("reportTableSubtitle").textContent='All available business records';$("reportOutput").innerHTML=table(dates.map(d=>{const x=dailyFinancials(d);return[d,money(x.totalSale),money(x.expenses),money(x.cashRemitted),x.hasRemitted&&x.short?money(x.short):'—',x.hasRemitted&&x.over?money(x.over):'—']}),["Date","Sales","Expenses","Remitted","Short","Over"]);renderExpenseList(date);}
 function renderEmployeeReport(){
  const rows=state.employees.map(e=>{const sales=sumSales(state.sales.filter(s=>String(s.employeeId)===String(e.id)));const days=state.attendance.filter(a=>String(a.employeeId)===String(e.id)).length;const commission=state.sales.filter(s=>String(s.employeeId)===String(e.id)).reduce((t,s)=>{const a=state.attendance.find(x=>x.employeeId===s.employeeId&&x.date===s.date);return t+(a&&isWorkedAttendance(a)?Number(s.amount||0)*effectiveCommissionRate(e,s.date,a.status):0)},0);return[e.id,e.name,money(sales),days,money(commission)]});$("reportSummaryCards").innerHTML=`<div class="report-summary-card report-blue"><span>Total Employees</span><b>${state.employees.length}</b></div><div class="report-summary-card report-green"><span>Employees With Sales</span><b>${new Set(state.sales.map(s=>String(s.employeeId))).size}</b></div><div class="report-summary-card report-purple"><span>Total Sales</span><b>${money(sumSales(state.sales))}</b></div><div class="report-summary-card report-gold"><span>Total Commission</span><b>${money(rows.reduce((t,r)=>t+Number(String(r[4]).replace(/[^0-9.-]/g,'')),0))}</b></div>`;$("reportSalesBreakdown").innerHTML='<p class="muted">Employee performance is calculated from actual sales and attendance.</p>';$("reportPaymentBreakdown").innerHTML='<p class="muted">Select a date/report period for payment breakdown.</p>';$("reportTableTitle").textContent='Employee Performance';$("reportTableSubtitle").textContent='Sales, attendance and commission';$("reportOutput").innerHTML=table(rows,["ID","Employee","Sales","Attendance Days","Commission"]);renderExpenseList($("reportDate")?.value||today());}
-let currentReportView='daily';
-function makeReport(mode){if(mode==='business')renderBusinessSummary();else if(mode==='employee')renderEmployeeReport();else renderReports(mode);}
+let currentReportView = (() => {
+ try { return sessionStorage.getItem('bigGuysReportView') || 'daily'; } catch(e) { return 'daily'; }
+})();
+function syncReportTabButtons(mode){
+ document.querySelectorAll('[data-report-view]').forEach(btn=>{
+   btn.classList.toggle('active', btn.dataset.reportView===mode);
+   btn.setAttribute('aria-selected', btn.dataset.reportView===mode ? 'true' : 'false');
+ });
+}
+function makeReport(mode){
+ mode = ['daily','monthly','yearly','business','employee'].includes(mode) ? mode : 'daily';
+ currentReportView = mode;
+ try { sessionStorage.setItem('bigGuysReportView', mode); } catch(e) {}
+ syncReportTabButtons(mode);
+ if(mode==='business') renderBusinessSummary();
+ else if(mode==='employee') renderEmployeeReport();
+ else renderReports(mode);
+}
 
 function salesDateRows(mode,date){
  if(mode==='daily')return salesForDate(date);
@@ -918,9 +934,13 @@ document.querySelectorAll(".side-nav[data-tab]").forEach(btn=>btn.addEventListen
 document.querySelectorAll("[data-tab-target]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab(btn.dataset.tabTarget)}));
 document.querySelectorAll("[data-sales-mode]").forEach(btn=>btn.addEventListener("click",(ev)=>{ev.preventDefault();activateTab("sales");renderSalesPage("daily");}));
 
-document.querySelectorAll('[data-report-view]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-report-view]').forEach(b=>b.classList.toggle('active',b===btn));makeReport(btn.dataset.reportView);}));
+document.querySelectorAll('[data-report-view]').forEach(btn=>btn.addEventListener('click',()=>makeReport(btn.dataset.reportView)));
 
 $("reportDate")?.addEventListener('change',()=>makeReport(currentReportView));
+
+// Keep the Reports tab and its content synchronized even when the browser restores
+// the previous visual tab state after a reload.
+syncReportTabButtons(currentReportView);
 $("salesAddQuick")?.addEventListener('click',()=>document.getElementById('saleAmount')?.focus());
 $("salesExportBtn")?.addEventListener('click',()=>exportCurrentTable('sales'));
 $("reportExportBtn")?.addEventListener('click',()=>exportCurrentTable('report'));
