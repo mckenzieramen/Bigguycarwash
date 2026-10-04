@@ -375,7 +375,7 @@ function renderScheduleRoster(){
  const root=$("scheduleRoster");if(!root)return;
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||state.scheduleWeekOf||today());
  if($("scheduleWeekOf"))$("scheduleWeekOf").value=weekOf;
- const days=WEEKDAYS.slice(1);
+ const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
  const dayColors={Monday:"mon",Tuesday:"tue",Wednesday:"wed",Thursday:"thu",Friday:"fri",Saturday:"sat",Sunday:"sun"};
  const siteOrder=["site1","site2","site3","off"];
  const rowLimits={site1:10,site2:5,site3:5,off:5};
