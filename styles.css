@@ -179,3 +179,18 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
   #payrollTable .table{min-width:780px;}
   #payrollDailyTable .table{min-width:800px;}
 }
+
+
+/* V58 — Mobile polish */
+@media(max-width:600px){
+  input,select,textarea,button{font-size:16px!important;}
+  .income-card{padding:16px 14px 14px;overflow:hidden;}
+  .income-card .card-heading h2{font-size:18px;}
+  .income-card .donut-wrap{min-height:185px;height:185px;padding:6px 0 4px;display:grid;place-items:center;overflow:visible;}
+  .income-card .donut{width:138px;height:138px;margin:auto;box-shadow:0 0 24px #1687ff16;}
+  .income-card .donut:before{width:88px;height:88px;}
+  .income-card .donut b{font-size:16px;}
+  .income-card .donut span{font-size:10px;}
+  .income-card .legend{gap:7px;font-size:12px;padding:0 2px 2px;}
+  .income-card .legend span{min-height:22px;}
+}

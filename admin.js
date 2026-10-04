@@ -228,8 +228,7 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*commRate(a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,`<div class="base-pay-editor"><input class="employee-base-input" data-id="${e.id}" type="number" min="0" step="0.01" value="${Number(baseRate(e)).toFixed(2)}" inputmode="decimal" aria-label="Base pay per day for ${e.name}"><button type="button" class="save-base-pay" data-id="${e.id}">SAVE</button></div>`,state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Base/Day","Face","Action"]);
- document.querySelectorAll(".save-base-pay").forEach(btn=>btn.onclick=async()=>{const id=btn.dataset.id;const employee=state.employees.find(x=>String(x.id)===String(id));const input=document.querySelector(`.employee-base-input[data-id="${CSS.escape(id)}"]`);if(!employee||!input)return;const value=Number(input.value);if(!Number.isFinite(value)||value<0){alert("Please enter a valid Base Pay / Day.");input.focus();return;}btn.disabled=true;btn.textContent="SAVING…";try{employee.basePay=Math.round(value*100)/100;let next;if(window.BigGuysCloud?.saveEmployee)next=await window.BigGuysCloud.saveEmployee(employee);else next=await save();if(next&&Array.isArray(next.employees))state=next;cacheState();refresh();}catch(err){console.error("Base pay save failed",err);alert(`Unable to save Base Pay / Day: ${err?.code||err?.message||err}`);btn.disabled=false;btn.textContent="SAVE";}});
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
@@ -268,6 +267,7 @@ async function loadModels(){
 }
 if($("empHireDate")){
  $("empHireDate").value=today();
+ $("empBasePay").addEventListener("input",()=>{const el=$("empBasePay");if(el)el.dataset.manuallyEdited="1";});
  $("empType").addEventListener("change",()=>{const el=$("empBasePay");if(el&&!el.dataset.manuallyEdited)el.value=defaultBaseRate($("empType").value);});
 $("empBasePay").addEventListener("input",()=>{$("empBasePay").dataset.manuallyEdited="1";});
 $("empHireDate").addEventListener("change",updateEmployeeIdPreview);
@@ -326,6 +326,7 @@ $("employeeForm").onsubmit=async e=>{
      await syncAdminNow();
    }
    e.target.reset();
+   $("empBasePay").dataset.manuallyEdited="";
    $("empBasePay").value=defaultBaseRate($("empType").value);
    $("empStart").value='08:00';
    $("empHireDate").value=today();
