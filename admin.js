@@ -267,7 +267,7 @@ function prettyScheduleDate(dateValue){
  return new Date(dateValue+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});
 }
 function employeeOptions(selected=""){
- return '<option value="">— Blank —</option>'+state.employees.map(e=>`<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${String(e.name||e.id).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}</option>`).join("");
+ return '<option value=""></option>'+state.employees.map(e=>`<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${String(e.name||e.id).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}</option>`).join("");
 }
 function scheduleRosterAssignments(){
  const out={};
@@ -295,6 +295,18 @@ async function saveRosterSchedule(){
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||today());
  const assignments=scheduleRosterAssignments();
  try{
+   const duplicateDays=[];
+   WEEKDAYS.slice(1).forEach(day=>{
+     const seen=new Set();
+     document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`).forEach(sel=>{
+       const id=String(sel.value||"");
+       if(!id)return;
+       if(seen.has(id)) duplicateDays.push(day);
+       seen.add(id);
+     });
+   });
+   if(duplicateDays.length){ alert(`A person can only be scheduled once per day. Please fix: ${[...new Set(duplicateDays)].join(", ")}.`); return; }
+
    const selectedByDay={};
    WEEKDAYS.slice(1).forEach(day=>{
      selectedByDay[day]={};
@@ -345,13 +357,13 @@ function renderScheduleRoster(){
        const selected=employeeAt(siteId,day,rowIndex);
        return `<div class="site-roster-cell ${selected?"has-name":"empty"}"><select class="site-roster-select" data-roster-site="${siteId}" data-roster-day="${day}" aria-label="${escapeHtml(siteId)} ${escapeHtml(day)} employee">${employeeOptions(selected)}</select></div>`;
      }).join("");
-     return `${cells}<div class="site-roster-num">${rowIndex+1}</div>`;
+     return `<div class="site-roster-num">${rowIndex+1}</div>${cells}`;
    }).join("");
  };
  const makeCard=(siteId,title,subtitle,badge,maxRows)=>`<div class="site-roster-card ${siteId==="off"?"dayoff-roster-card":""}">
    <div class="site-roster-title"><div><strong>${title}</strong><small>${subtitle}</small></div><span class="site-roster-badge">${badge}</span></div>
    <div class="site-roster-scroll"><div class="site-roster-grid">
-     ${days.map((d,i)=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}<small>${prettyScheduleDate(addDaysISO(weekOf,i))}</small></div>`).join("")}<div class="site-roster-corner">#</div>
+     <div class="site-roster-corner">#</div>${days.map((d,i)=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}<small>${prettyScheduleDate(addDaysISO(weekOf,i))}</small></div>`).join("")}
      ${buildRows(siteId,maxRows)}
    </div></div>
  </div>`;
