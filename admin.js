@@ -345,13 +345,13 @@ function renderScheduleRoster(){
        const selected=employeeAt(siteId,day,rowIndex);
        return `<div class="site-roster-cell ${selected?"has-name":"empty"}"><select class="site-roster-select" data-roster-site="${siteId}" data-roster-day="${day}" aria-label="${escapeHtml(siteId)} ${escapeHtml(day)} employee">${employeeOptions(selected)}</select></div>`;
      }).join("");
-     return `<div class="site-roster-num">${rowIndex+1}</div>${cells}`;
+     return `${cells}<div class="site-roster-num">${rowIndex+1}</div>`;
    }).join("");
  };
  const makeCard=(siteId,title,subtitle,badge,maxRows)=>`<div class="site-roster-card ${siteId==="off"?"dayoff-roster-card":""}">
    <div class="site-roster-title"><div><strong>${title}</strong><small>${subtitle}</small></div><span class="site-roster-badge">${badge}</span></div>
    <div class="site-roster-scroll"><div class="site-roster-grid">
-     <div class="site-roster-corner">#</div>${days.map((d,i)=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}<small>${prettyScheduleDate(addDaysISO(weekOf,i))}</small></div>`).join("")}
+     ${days.map((d,i)=>`<div class="site-roster-day ${dayColors[d]}">${d.toUpperCase()}<small>${prettyScheduleDate(addDaysISO(weekOf,i))}</small></div>`).join("")}<div class="site-roster-corner">#</div>
      ${buildRows(siteId,maxRows)}
    </div></div>
  </div>`;
