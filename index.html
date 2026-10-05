@@ -116,7 +116,7 @@
     if(gate){gate.classList.remove('hidden');gate.style.display='none';}
     if(locationGate)locationGate.classList.remove('hidden');
     if(locationMessage)locationMessage.textContent=reason||'You left the approved DTR location. DTR has been locked.';
-    if(locationError)locationError.textContent='Return to your assigned approved site to unlock DTR again.';
+    if(locationError)locationError.textContent='Return to your assigned site to unlock DTR again.';
     if(retry){retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';}
   }
   window.lockDtrForLocation=lockDtrForLocation;

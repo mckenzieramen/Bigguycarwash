@@ -162,7 +162,7 @@ async function verifyFace(detection){
    if(window.lockDtrForLocation){
      window.lockDtrForLocation(`You are not assigned on this site.\n\nCurrent location: ${currentName}\nYou are assigned to: ${assignedName} today.`);
    }else{
-     resetRecognition(`You are not assigned on this site. ${match.employee.name} is assigned to ${assignedName} today.`);
+     resetRecognition(`YOU ARE NOT ASSIGNED ON THIS SITE\n\nCurrent location: ${currentName}\nYou are assigned to: ${assignedName} today.`);
    }
    setOval("bad");
    return;
