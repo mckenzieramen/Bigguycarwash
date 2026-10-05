@@ -53,32 +53,6 @@
     const [employees,faces,attendance]=await Promise.all([getAll(C.employees),getAll(C.faces),getAll(C.attendance)]);
     let sales=[],reports=[];
     if(isAdmin()) [sales,reports]=await Promise.all([getAll(C.sales),getAll(C.reports)]);
-
-    // Recovery fallback after an accidental employee-collection deletion.
-    // Keep real employee docs authoritative; otherwise derive a temporary
-    // employee list from surviving face/attendance/sales records.
-    const realEmployeeIds=new Set(employees.map(e=>String(e?.id||e?.employeeId||'').trim()).filter(Boolean));
-    const recoveredById=new Map();
-    const addRecovered=(id,meta={})=>{
-      id=String(id||'').trim(); if(!id||realEmployeeIds.has(id))return;
-      const cur=recoveredById.get(id)||{id,recovered:true};
-      const first=String(meta.firstName||'').trim(), last=String(meta.lastName||'').trim();
-      const candidateName=String(meta.name||meta.employeeName||meta.fullName||meta.displayName||[first,last].filter(Boolean).join(' ')||'').trim();
-      if(candidateName && !cur.name)cur.name=candidateName;
-      if(meta.type && !cur.type)cur.type=meta.type;
-      if(meta.start && !cur.start)cur.start=meta.start;
-      if(meta.hireDate && !cur.hireDate)cur.hireDate=meta.hireDate;
-      recoveredById.set(id,cur);
-    };
-    faces.forEach(r=>addRecovered(r.employeeId||r.id,{...r,name:r.name||r.employeeName||r.fullName||r.displayName,firstName:r.firstName,lastName:r.lastName,type:r.type,start:r.start,hireDate:r.hireDate}));
-    attendance.forEach(r=>addRecovered(r.employeeId,{name:r.employeeName||r.name,firstName:r.firstName,lastName:r.lastName,type:r.employeeType||r.type,start:r.employeeStart||r.start,hireDate:r.hireDate}));
-    sales.forEach(r=>addRecovered(r.employeeId,{name:r.employeeName||r.name,firstName:r.firstName,lastName:r.lastName}));
-    const recoveredEmployees=[...recoveredById.values()].map(e=>({...e,name:e.name||`Employee ${e.id}`,type:['full','semi','part'].includes(e.type)?e.type:'part',start:e.start||'08:00',weeklySchedules:e.weeklySchedules||{},weeklySchedule:e.weeklySchedule||{Monday:'',Tuesday:'',Wednesday:'',Thursday:'',Friday:'',Saturday:'',Sunday:''},offDays:Array.isArray(e.offDays)?e.offDays:[]}));
-    // Merge real employee documents with recovered IDs from surviving face/attendance/sales
-    // records. This is important after an accidental collection deletion: creating one
-    // recovered employee must not make the other recovered employees disappear.
-    const recoveredOnly=recoveredEmployees.filter(r=>!employees.some(e=>String(e?.id||e?.employeeId||'')===String(r.id)));
-    const effectiveEmployees=[...employees,...recoveredOnly];
     const faceMap={},faceTimes={};
     // Resolve each face document to the REAL employee ID. Some older records can
     // contain an employeeId field that is stale/mismatched while the Firestore
@@ -86,7 +60,7 @@
     // actually exists in the current employee collection. This keeps every face
     // enrollment unique to its employee and prevents DTR from saying
     // "employee not registered" when the face record itself exists.
-    const employeeIdSet=new Set(effectiveEmployees.map(e=>String(e?.id||e?.employeeId||'').trim()).filter(Boolean));
+    const employeeIdSet=new Set(employees.map(e=>String(e?.id||e?.employeeId||'').trim()).filter(Boolean));
     faces.forEach(r=>{
       const candidates=[r.employeeId,r.id].map(v=>String(v||'').trim()).filter(Boolean);
       const id=candidates.find(v=>employeeIdSet.has(v));
@@ -100,7 +74,7 @@
     let lastFaceCapture=null;
     // Lightweight latest capture is optional and deliberately kept separate from history.
     try{const latest=await db.doc('bigguys_meta/attendance').get();if(latest.exists)lastFaceCapture=latest.data()?.lastFaceCapture||null;}catch(e){}
-    return clean({employees:effectiveEmployees.map(x=>{const y={...x};if(!y.id)y.id=x.id;const enrolled=faceMap[String(y.id)]?.length>=5||y.faceEnrolled===true;y.faceEnrolled=!!enrolled;if(enrolled)y.faceSampleCount=faceMap[String(y.id)]?.length||Number(y.faceSampleCount||5);return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
+    return clean({employees:employees.map(x=>{const y={...x};if(!y.id)y.id=x.id;const enrolled=faceMap[String(y.id)]?.length>=5||y.faceEnrolled===true;y.faceEnrolled=!!enrolled;if(enrolled)y.faceSampleCount=faceMap[String(y.id)]?.length||Number(y.faceSampleCount||5);return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
   }
   async function migrateLegacyIfNeeded(initial){
     if(!isAdmin())return readCloud();
@@ -291,10 +265,9 @@
     readyPromise=(async()=>{try{await initFirebase();await ensureAuth(mode);let next=await migrateLegacyIfNeeded(initial);window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);startListeners(onRemote);startCentralRefresh(onRemote);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return true;}catch(e){status({ready:false,status:'error',error:e,lastSyncError:e});console.error('Firebase initialization failed:',e);return false;}})();return readyPromise;
   }
   async function getAdminProfile(user){await initFirebase();const u=user||auth?.currentUser;if(!u||u.isAnonymous)throw new Error('Admin authentication required.');const s=await db.doc(`admins/${u.uid}`).get();if(!s.exists)throw new Error('Admin profile not found in Firestore.');const p=s.data()||{};if(p.role!=='admin'||p.active!==true)throw new Error('This Firebase account is not an active administrator.');return {uid:u.uid,...p};}
-  async function setAdminPersistence(rememberMe){await initFirebase();const persistence=rememberMe?firebase.auth.Auth.Persistence.LOCAL:firebase.auth.Auth.Persistence.SESSION;await auth.setPersistence(persistence);return persistence;}
-  async function adminLogin(email,password,rememberMe=true){await initFirebase();await setAdminPersistence(rememberMe);const user=(await auth.signInWithEmailAndPassword(email,password)).user;if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');await getAdminProfile(user);readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];return user;}
+  async function adminLogin(email,password){await initFirebase();const user=(await auth.signInWithEmailAndPassword(email,password)).user;if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');await getAdminProfile(user);readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];return user;}
   async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;}
   async function getAdminProfilePublic(){return getAdminProfile();}
   async function refreshCloud(){await initFirebase();await ensureAuth(isAdmin()?'admin':'dtr');const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return next;}
-  window.BigGuysCloud={configured,isAdmin,initFirebase,ensureAuth,init,refresh:refreshCloud,setAdminPersistence,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,saveScheduleWeek,cleanupExpiredSchedules,deleteScheduleWeek,deleteEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
+  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,refresh:refreshCloud,adminLogin,adminLogout,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,saveScheduleWeek,cleanupExpiredSchedules,deleteScheduleWeek,deleteEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
 })();

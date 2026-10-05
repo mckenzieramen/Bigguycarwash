@@ -289,38 +289,9 @@ function addDaysISO(dateValue,offset){
 function prettyScheduleDate(dateValue){
  return new Date(dateValue+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});
 }
-function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));}
-function displayEmployeeName(e){
- const first=String(e?.firstName||"").trim(), last=String(e?.lastName||"").trim();
- const full=[first,last].filter(Boolean).join(" ").trim();
- const name=String(e?.name||"").trim();
- if(full) return full;
- if(name && !/^Employee\s+\d{6,}$/i.test(name)) return name;
- return "Name not restored";
-}
 function employeeOptions(selected=""){
- return '<option value=""></option>'+state.employees.map(e=>{
-   const label=displayEmployeeName(e);
-   return `<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${escapeHtml(label)}</option>`;
- }).join("");
+ return '<option value=""></option>'+state.employees.map(e=>`<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${String(e.name||e.id).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}</option>`).join("");
 }
-async function setRecoveredEmployeeName(employeeId){
- const emp=state.employees.find(e=>String(e.id)===String(employeeId));
- if(!emp)return;
- const current=String(emp.name||"").replace(/^Employee\s+\d{6,}$/i,"").trim();
- const name=window.prompt(`Enter the employee name for ${emp.id}:`,current);
- if(name===null)return;
- const cleanName=name.trim();
- if(!cleanName){alert("Please enter a name.");return;}
- try{
-   const updated={...emp,name:cleanName,firstName:cleanName.split(/\s+/)[0]||cleanName,lastName:cleanName.split(/\s+/).slice(1).join(" ")||"",recovered:false};
-   if(window.BigGuysCloud?.saveEmployee) state=await window.BigGuysCloud.saveEmployee(updated);
-   else state.employees=state.employees.map(e=>String(e.id)===String(employeeId)?updated:e);
-   cacheState();
-   refresh();
- }catch(err){console.error("Recovered employee name save failed:",err);alert(`Unable to save employee name: ${err?.code||err?.message||err}`);}
-}
-
 function scheduleRosterAssignments(){
  const out={};
  document.querySelectorAll('#scheduleRoster [data-roster-site][data-roster-day]').forEach(sel=>{
@@ -524,48 +495,29 @@ function renderSavedScheduleWeeks(){
  }
  const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
  root.innerHTML='<div class="saved-weeks-heading"><strong>Saved weeks</strong><span>Choose EDIT to load that saved week into the table below.</span></div><div class="saved-weeks-list">'+weeks.slice().reverse().map(w=>`<div class="saved-week-item ${w===current?'active':''}"><button type="button" class="saved-week-btn" data-week="${w}"><span>${prettyScheduleDate(w)} – ${prettyScheduleDate(addDaysISO(w,6))}</span><small>EDIT</small></button><button type="button" class="saved-week-delete" data-delete-week="${w}" title="Delete saved schedule">DELETE</button></div>`).join('')+'</div>';
- root.querySelectorAll('.saved-week-btn').forEach(btn=>btn.addEventListener('click',async()=>{
-   const week=mondayOfWeek(btn.dataset.week||today());
-   if(!hasSavedScheduleForWeek(week)){
-     alert("That saved week is no longer available. Refreshing the saved schedule list.");
-     renderSavedScheduleWeeks();
-     return;
-   }
-   // EDIT must load ONLY the selected saved week. It must never reuse the
-   // create-draft buffer or another week's schedule.
+ root.querySelectorAll('.saved-week-btn').forEach(btn=>btn.addEventListener('click',()=>{
+   const week=btn.dataset.week;
    scheduleEditingWeek=week;
-   scheduleDraftActive=false;
-   scheduleDraftWeek="";
-   scheduleBlankDraft=false;
-   state.scheduleWeekOf=week;
    if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
-   scheduleMode="scheduled";
-   scheduleModeInitialized=true;
-   persistScheduleUiState();
+   state.scheduleWeekOf=week;
+   scheduleBlankDraft=false;
    setScheduleMode("scheduled");
-   const saveBtn=$("saveRosterSchedule"); if(saveBtn){saveBtn.textContent="UPDATE SCHEDULE";saveBtn.disabled=false;}
    renderScheduleRoster();
    renderSavedScheduleWeeks();
+   const saveBtn=$("saveRosterSchedule"); if(saveBtn)saveBtn.textContent="UPDATE SCHEDULE";
+   persistScheduleUiState();
  }));
  root.querySelectorAll('.saved-week-delete').forEach(btn=>btn.addEventListener('click',async()=>{
    const week=btn.dataset.deleteWeek;
    if(!week)return;
    if(!confirm(`Delete the saved schedule for ${prettyScheduleDate(week)} – ${prettyScheduleDate(addDaysISO(week,6))}? This removes only that weekly schedule, not attendance, sales, payroll, employees, or faces.`))return;
    try{
-     let fresh=null;
-     if(window.BigGuysCloud?.deleteScheduleWeek){
-       fresh=await window.BigGuysCloud.deleteScheduleWeek(week);
-     }
-     // Firebase is authoritative. Use the fresh cloud result instead of
-     // locally guessing which employee documents changed.
-     if(fresh?.employees) state.employees=fresh.employees;
-     else {
-       state.employees=state.employees.map(e=>{
-         const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
-         delete weekly[week];
-         return {...e,weeklySchedules:weekly};
-       });
-     }
+     if(window.BigGuysCloud?.deleteScheduleWeek) await window.BigGuysCloud.deleteScheduleWeek(week);
+     state.employees=state.employees.map(e=>{
+       const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
+       delete weekly[week];
+       return {...e,weeklySchedules:weekly};
+     });
      clearScheduleDraft(week);
      if(scheduleEditingWeek===week)scheduleEditingWeek="";
      const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
@@ -593,28 +545,18 @@ function renderSchedules(){
  state.scheduleWeekOf=weekOf;
  if(!scheduleModeInitialized){
    const savedWeeks=savedScheduleWeeks();
-   if(scheduleMode==="scheduled" && savedWeeks.length){
-     // On a fresh reload, Scheduled opens the newest saved week so the full table
-     // is visible again. A week remains editable only after this explicit load.
-     const latest=savedWeeks[savedWeeks.length-1];
-     scheduleEditingWeek=latest;
-     state.scheduleWeekOf=latest;
-     if(weekInput)weekInput.value=latest;
-   }else if(scheduleMode==="scheduled"&&!savedWeeks.length){
-     scheduleMode="create";
-     scheduleEditingWeek="";
+   if(scheduleMode==="scheduled" && (!savedWeeks.length || !hasSavedScheduleForWeek(weekOf))){
+     scheduleMode=savedWeeks.length?"scheduled":"create";
+     if(scheduleMode==="scheduled")scheduleEditingWeek="";
    }
    scheduleModeInitialized=true;
  }
- const activeWeek=mondayOfWeek($("scheduleWeekOf")?.value||state.scheduleWeekOf||today());
- state.scheduleWeekOf=activeWeek;
- if($("scheduleWeekOf"))$("scheduleWeekOf").value=activeWeek;
- if(scheduleMode==="create")scheduleBlankDraft=!scheduleDraftForWeek(activeWeek);
- else scheduleBlankDraft=!hasSavedScheduleForWeek(activeWeek);
+ if(scheduleMode==="create")scheduleBlankDraft=!scheduleDraftForWeek(weekOf);
+ else scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
  renderSavedScheduleWeeks();
  setScheduleMode(scheduleMode);
  const saveBtn=$("saveRosterSchedule");
- const canEdit=scheduleMode==="create" || (scheduleMode==="scheduled"&&scheduleEditingWeek===activeWeek&&hasSavedScheduleForWeek(activeWeek));
+ const canEdit=scheduleMode==="create" || (scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf&&hasSavedScheduleForWeek(weekOf));
  if(saveBtn){saveBtn.textContent=scheduleMode==="scheduled"?"UPDATE SCHEDULE":"SAVE SCHEDULE";saveBtn.disabled=!canEdit;}
  renderScheduleRoster();
  persistScheduleUiState();
@@ -637,8 +579,6 @@ async function saveRosterSchedule(){
      });
    });
    if(duplicateDays.length){ alert(`A person can only be scheduled once per day. Please fix: ${[...new Set(duplicateDays)].join(", ")}.`); return; }
-   const selectedCount=[...document.querySelectorAll('#scheduleRoster select[data-roster-site][data-roster-day]')].filter(sel=>String(sel.value||"")).length;
-   if(!selectedCount){ alert("Nothing is assigned yet. Select at least one employee or Day Off before saving this week."); return; }
 
    const selectedByDay={};
    WEEKDAYS.slice(1).forEach(day=>{
@@ -656,14 +596,6 @@ async function saveRosterSchedule(){
      return {...e,weeklySchedules};
    });
    if(window.BigGuysCloud?.saveScheduleWeek){
-     // Recovered employees came from surviving face/attendance records and may not yet
-     // have a document in bigguys_employees after the accidental collection deletion.
-     // Upsert them first so the saved schedule has a durable employee record.
-     for(const employee of employees){
-       if(employee?.recovered && window.BigGuysCloud?.saveEmployee){
-         state=await window.BigGuysCloud.saveEmployee(employee);
-       }
-     }
      const scheduleMap={};
      employees.forEach(employee=>{scheduleMap[String(employee.id)]=employee.weeklySchedules?.[weekOf]||{};});
      const fresh=await window.BigGuysCloud.saveScheduleWeek(weekOf,scheduleMap);
@@ -696,8 +628,7 @@ function renderScheduleRoster(){
  const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
  const dayColors={Monday:"mon",Tuesday:"tue",Wednesday:"wed",Thursday:"thu",Friday:"fri",Saturday:"sat",Sunday:"sun"};
  const siteOrder=["site1","site2","site3","off"];
- const rosterRows=Math.max(state.employees.length,5);
- const rowLimits={site1:rosterRows,site2:rosterRows,site3:rosterRows,off:rosterRows};
+ const rowLimits={site1:10,site2:5,site3:5,off:5};
  const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
  const draft=(scheduleMode==="create" && scheduleDraftActive && scheduleDraftWeek===weekOf)?draftAssignmentsForWeek(weekOf):null;
  const viewingSavedWeek=scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf&&hasSavedScheduleForWeek(weekOf);
@@ -799,14 +730,13 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[displayEmployeeName(e),e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="name-employee" data-id="${e.id}">${e.recovered||!String(e.firstName||e.lastName||e.name||"").trim()||/^Employee\s+\d{6,}$/i.test(String(e.name||""))?"EDIT NAME":"EDIT NAME"}</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
-document.querySelectorAll(".name-employee").forEach(btn=>btn.onclick=()=>setRecoveredEmployeeName(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
- if(typeof renderSettings==="function")renderSettings();
- const opts=state.employees.map(e=>`<option value="${e.id}">${escapeHtml(displayEmployeeName(e))}</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
+ renderSettings();
+ const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  wrapAllTableScrolls();
  bindHorizontalScrollPersistence();
@@ -847,42 +777,27 @@ if($("empHireDate")){
  updateEmployeeIdPreview();
 }
 
-async function showAdminDashboardAfterLogin(){
-  $("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");
-  $("loginError").textContent="";refresh();startClock();
-  BigGuysCloud.init(state,remote=>{
-    state=remote;
-    cacheState();
-    scheduleModeInitialized=false;
-    refresh();
-    cleanupExpiredScheduleWeeks();
-  },'admin').catch(err=>{ console.error('Background Firestore sync failed:',err); });
-}
-
-async function restoreAdminSession(){
-  try{
-    if(!window.BigGuysCloud?.configured)return false;
-    await BigGuysCloud.initFirebase?.();
-  }catch(e){}
-  try{
-    if(!window.firebase?.auth)return false;
-    const user=window.firebase.auth().currentUser;
-    if(!user||user.isAnonymous)return false;
-    const profile=await BigGuysCloud.getAdminProfile();
-    if(profile?.role!=='admin'||profile?.active!==true)return false;
-    await showAdminDashboardAfterLogin();
-    return true;
-  }catch(e){ console.warn('Admin session restore skipped:',e); return false; }
-}
-
 $("loginBtn").onclick=async()=>{
-  const email=$("adminEmail").value.trim(),password=$("adminPassword").value,rememberMe=!!$("rememberMe")?.checked;
+  const email=$("adminEmail").value.trim(),password=$("adminPassword").value;
   $("loginBtn").disabled=true;$("loginError").textContent="Signing in…";
   try{
     if(!window.BigGuysCloud?.configured)throw new Error("Firebase is not configured.");
     if(email!==ADMIN_EMAIL)throw new Error("This account is not authorized as the Big Guy's administrator.");
-    await BigGuysCloud.adminLogin(email,password,rememberMe);
-    await showAdminDashboardAfterLogin();
+    await BigGuysCloud.adminLogin(email,password);
+    // Show the dashboard immediately after Firebase Authentication succeeds.
+    // Firestore sync continues in the background so login is not blocked by
+    // network reads/writes.
+    $("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");
+    $("loginError").textContent="";refresh();startClock();
+    BigGuysCloud.init(state,remote=>{
+      state=remote;
+      cacheState();
+      scheduleModeInitialized=false;
+      refresh();
+      cleanupExpiredScheduleWeeks();
+    },'admin').catch(err=>{
+      console.error('Background Firestore sync failed:',err);
+    });
   }catch(err){
     console.error(err);
     $("loginError").textContent=err?.message||"Invalid admin email or password.";
@@ -891,9 +806,8 @@ $("loginBtn").onclick=async()=>{
 $("logoutBtn").onclick=async()=>{
   try{sessionStorage.removeItem(FACE_SCAN_SESSION_KEY);}catch(e){}
   try{await BigGuysCloud.adminLogout();}catch(e){console.warn(e)}
-  $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";$("rememberMe").checked=false;document.body.classList.remove("logged-in");
+  $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";document.body.classList.remove("logged-in");
 };
-window.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>restoreAdminSession(),0); });
 $("employeeForm").onsubmit=async e=>{
  e.preventDefault();
  const btn=e.target.querySelector('button[type="submit"]');
@@ -1181,7 +1095,7 @@ function renderEmployeeDtr(id){
 function refreshDtrSelector(){
  const select=$("dtrEmployeeSelect"); if(!select)return;
  const current=selectedDtrEmployeeId||select.value||"";
- select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${escapeHtml(displayEmployeeName(e))}</option>`).join("");
+ select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${e.name} — ${e.id}</option>`).join("");
  if(state.employees.some(e=>String(e.id)===String(current))){select.value=current;renderEmployeeDtr(current);}else{select.value="";selectedDtrEmployeeId="";renderEmployeeDtr("");}
 }
 
@@ -1415,19 +1329,11 @@ $("scheduleModeCreate")?.addEventListener("click",createNewSchedule);
 $("createAnotherSchedule")?.addEventListener("click",createNewSchedule);
 $("scheduleModeScheduled")?.addEventListener("click",()=>{
  if(scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());
- const weeks=savedScheduleWeeks();
- const latest=weeks.length?weeks[weeks.length-1]:"";
- scheduleEditingWeek=latest;
- scheduleDraftActive=false;
- scheduleDraftWeek="";
- scheduleBlankDraft=!latest;
- scheduleMode="scheduled";
- if(latest){state.scheduleWeekOf=latest;if($("scheduleWeekOf"))$("scheduleWeekOf").value=latest;}
- persistScheduleUiState();
+ scheduleEditingWeek="";
  setScheduleMode("scheduled");
  renderSavedScheduleWeeks();
- renderScheduleRoster();
- const saveBtn=$("saveRosterSchedule"); if(saveBtn){saveBtn.textContent=latest?"UPDATE SCHEDULE":"SAVE SCHEDULE";saveBtn.disabled=!latest;}
+ scheduleBlankDraft=true;
+ renderSchedules();
 });
 $("saveRosterSchedule")?.addEventListener("click",saveRosterSchedule);
 
@@ -1473,9 +1379,7 @@ function startClock(){
 }
 // Keep the admin clock/date live even after tab restore, browser sleep, or visibility changes.
 startClock();
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)startClock();else if(scheduleMode==="create"&&$("scheduleRoster"))captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());});
-window.addEventListener("beforeunload",()=>{if(scheduleMode==="create"&&$("scheduleRoster"))captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());});
-window.addEventListener("pagehide",()=>{if(scheduleMode==="create"&&$("scheduleRoster"))captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)startClock();});
 function activateTab(tab){
  if(tab!=="schedules" && scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());
  document.querySelectorAll(".side-nav[data-tab]").forEach(x=>x.classList.toggle("active",x.dataset.tab===tab));
