@@ -27,8 +27,10 @@ function employeeSiteName(employee,date=today()){const id=employeeSiteId(employe
 async function verifyEmployeeSite(employee){
  const siteId=employeeSiteId(employee);
  if(!siteId||!window.BIGGUYS_DTR_SITES?.[siteId])return false;
- // Strictly require the employee's assigned site to match the site where the device is located.
- // Being inside another approved site is NOT sufficient.
+ // The employee may use the DTR ONLY inside the site assigned to that
+ // employee for today. Being inside another approved site is never enough.
+ // Do not require the assigned site to also be the globally-nearest site;
+ // that can falsely reject a valid location near two approved geofences.
  if(window.BIGGUYS_DTR_IS_AT_ASSIGNED_SITE)return await window.BIGGUYS_DTR_IS_AT_ASSIGNED_SITE(siteId);
  if(window.BIGGUYS_DTR_IS_AT_SITE)return await window.BIGGUYS_DTR_IS_AT_SITE(siteId);
  return false;
@@ -153,8 +155,15 @@ async function verifyFace(detection){
  if(match.employee&&match.distance<=.60){
   const atAssignedSite=await verifyEmployeeSite(match.employee);
   if(!atAssignedSite){
+   const assignedName=employeeSiteName(match.employee);
+   const currentId=window.__DTR_CURRENT_SITE_ID__;
+   const currentName=window.BIGGUYS_DTR_SITES?.[currentId]?.name || "another location";
    recognizedEmployee=null;
-   resetRecognition(`${match.employee.name} is assigned to ${employeeSiteName(match.employee)}. You are not at the employee's assigned site.`);
+   if(window.lockDtrForLocation){
+     window.lockDtrForLocation(`You are not assigned on this site.\n\nCurrent location: ${currentName}\nYou are assigned to: ${assignedName} today.`);
+   }else{
+     resetRecognition(`You are not assigned on this site. ${match.employee.name} is assigned to ${assignedName} today.`);
+   }
    setOval("bad");
    return;
   }

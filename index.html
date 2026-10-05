@@ -150,15 +150,27 @@
     if(locationWatchId!==null||!navigator.geolocation)return;
     const evaluatePosition=(pos)=>{
       const {latitude,longitude}=pos.coords;
-      const best=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch]
+      const current=nearestApprovedSite(latitude,longitude);
+      const assigned=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch]
         ? (()=>{const site=window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch];const n=nearestForSite(latitude,longitude,site);return {id:assignedSiteIdForWatch,site,distance:n.distance,lat:n.lat,lng:n.lng};})()
-        : nearestApprovedSite(latitude,longitude);
+        : null;
+      window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
+      const best=assigned||current;
       if(!best||best.distance>best.site.radius){
-        if(window.__DTR_ACCESS_UNLOCKED__||window.__DTR_LOCATION_OK__)lockDtrForLocation('You moved outside the approved DTR location. DTR has been automatically closed.');
+        if(window.__DTR_ACCESS_UNLOCKED__||window.__DTR_LOCATION_OK__){
+          const assignedName=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES?.[assignedSiteIdForWatch]?.name;
+          const currentName=current?.site?.name || 'an unapproved location';
+          lockDtrForLocation(assignedName
+            ? `You are not assigned on this site.\n\nCurrent location: ${currentName}\nYou are assigned to: ${assignedName} today.`
+            : 'You moved outside the approved DTR location. DTR has been automatically closed.');
+        }
+        return;
+      }
+      if(assignedSiteIdForWatch && assigned && assigned.distance>assigned.site.radius){
+        lockDtrForLocation(`You are not assigned on this site.\n\nCurrent location: ${current?.site?.name||'another location'}\nYou are assigned to: ${assigned.site.name} today.`);
         return;
       }
       window.__DTR_LOCATION_OK__=true;
-      window.__DTR_CURRENT_SITE_ID__=best.id;
     };
     locationWatchId=navigator.geolocation.watchPosition(evaluatePosition,()=>{}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
     clearInterval(locationPollTimer);
@@ -186,7 +198,10 @@
         const current=nearestApprovedSite(latitude,longitude);
         const atAssigned=assignedNearest.distance<=assigned.radius;
         window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
-        resolve(atAssigned && (!current || current.id===siteId));
+        // The employee is valid if the GPS point is inside the assigned site's
+        // own geofence. Do not reject merely because another approved site is
+        // geographically closer due to GPS accuracy/geofence overlap.
+        resolve(atAssigned);
       },()=>resolve(false),{enableHighAccuracy:true,timeout:10000,maximumAge:0});
     });
   };
