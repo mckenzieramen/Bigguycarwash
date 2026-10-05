@@ -9,7 +9,9 @@ state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?s
 state.dailyReports=state.dailyReports&&typeof state.dailyReports==="object"?state.dailyReports:{};
 state.scheduleWeekOf=state.scheduleWeekOf||"";
 state.scheduleDrafts=state.scheduleDrafts&&typeof state.scheduleDrafts==="object"?state.scheduleDrafts:{};
+const SCHEDULE_DRAFT_SESSION_KEY="bigguys_schedule_create_drafts_v2";
 const SCHEDULE_UI_STATE_KEY="bigguys_schedule_ui_state_v1";
+try{const cachedDrafts=JSON.parse(sessionStorage.getItem(SCHEDULE_DRAFT_SESSION_KEY)||"{}");if(cachedDrafts&&typeof cachedDrafts==="object")state.scheduleDrafts={...state.scheduleDrafts,...cachedDrafts};}catch(e){}
 let enrollStream=null,modelsReady=false;
 // Start the schedule screen as a blank, unsaved draft without deleting any saved Firebase schedule/time data.
 let scheduleBlankDraft=true;
@@ -194,23 +196,9 @@ function refreshDashboardCharts(){
  const carwash=state.sales.filter(s=>s.date===d&&(String(s.category||"").toLowerCase()==="carwash"||(!s.category&&/carwash|wash/i.test(s.note||"")))).reduce((t,s)=>t+Number(s.amount||0),0);
  const detail=state.sales.filter(s=>s.date===d&&(String(s.category||"").toLowerCase()==="detailing"||(!s.category&&/detail/i.test(s.note||"")))).reduce((t,s)=>t+Number(s.amount||0),0);
  const addon=state.sales.filter(s=>s.date===d&&String(s.category||"").toLowerCase()==="add-ons").reduce((t,s)=>t+Number(s.amount||0),0);
- const values=[carwash,detail,addon];
- const rawPerc=total?values.map(v=>Math.max(0,(v/total)*100)):[0,0,0];
- const perc=total?rawPerc.map(v=>Math.round(v)):[0,0,0];
- const classified=values.reduce((a,b)=>a+b,0);
- const donut=document.getElementById("incomeDonut");
- if(donut){
-   // When every category is 0, render one neutral circle instead of a fake
-   // three-way split. Otherwise show the actual category proportions and keep
-   // any uncategorized remainder neutral.
-   if(!total || classified<=0) donut.style.background="#d5e3ef";
-   else {
-     const p0=Math.max(0,Math.min(100,rawPerc[0]));
-     const p1=Math.max(0,Math.min(100,p0+rawPerc[1]));
-     const p2=Math.max(0,Math.min(100,p1+rawPerc[2]));
-     donut.style.background=`conic-gradient(#1687ff 0 ${p0}%,#ffb51b ${p0}% ${p1}%,#63c36a ${p1}% ${p2}%,#d5e3ef ${p2}% 100%)`;
-   }
- }
+ const classified=carwash+detail+addon, rest=Math.max(0,total-classified), values=classified? [carwash,detail,addon+rest]:[0,0,0];
+ const perc=total?[Math.round(values[0]/total*100),Math.round(values[1]/total*100),Math.max(0,100-Math.round(values[0]/total*100)-Math.round(values[1]/total*100))]:[0,0,0];
+ const donut=document.getElementById("incomeDonut"); if(donut)donut.style.background=`conic-gradient(#1687ff 0 ${perc[0]}%,#ffb51b ${perc[0]}% ${perc[0]+perc[1]}%,#d5e3ef ${perc[0]+perc[1]}% 100%)`;
  if($("incomeTotal"))$("incomeTotal").textContent=money(total); if($("incomeCarwash"))$("incomeCarwash").textContent=perc[0]+"%"; if($("incomeDetailing"))$("incomeDetailing").textContent=perc[1]+"%"; if($("incomeAddons"))$("incomeAddons").textContent=perc[2]+"%";
 }
 function refreshRightPanel(){
@@ -365,9 +353,7 @@ function loadScheduleUiState(){
     return {
       mode:raw.mode==="scheduled"?"scheduled":"create",
       week:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.week||""))?mondayOfWeek(raw.week):"",
-      editingWeek:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.editingWeek||""))?mondayOfWeek(raw.editingWeek):"",
-      draftActive:raw.draftActive===true,
-      draftWeek:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.draftWeek||""))?mondayOfWeek(raw.draftWeek):""
+      editingWeek:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.editingWeek||""))?mondayOfWeek(raw.editingWeek):""
     };
   }catch(err){return null;}
 }
@@ -392,14 +378,12 @@ function restoreScheduleUiState(){
 function persistScheduleDrafts(){
   try{
     state.scheduleDrafts=state.scheduleDrafts&&typeof state.scheduleDrafts==="object"?state.scheduleDrafts:{};
-    // Drafts are intentionally LOCAL ONLY. They are not Firebase schedules and
-    // must survive reload/logout without becoming a saved weekly schedule.
-    localStorage.setItem("bigguys_schedule_drafts_v3",JSON.stringify(state.scheduleDrafts));
+    localStorage.setItem("bigguys_schedule_drafts",JSON.stringify(state.scheduleDrafts));
   }catch(err){ console.warn("Schedule draft local save skipped:",err); }
 }
 function loadScheduleDrafts(){
   try{
-    const raw=localStorage.getItem("bigguys_schedule_drafts_v3");
+    const raw=localStorage.getItem("bigguys_schedule_drafts");
     const parsed=raw?JSON.parse(raw):{};
     return parsed&&typeof parsed==="object"?parsed:{};
   }catch(err){ return {}; }
@@ -422,15 +406,14 @@ function captureCurrentScheduleDraft(weekOf){
    const id=String(sel.value||"");
    const day=sel.dataset.rosterDay;
    const site=sel.dataset.rosterSite;
-   if(!id||!day||!site)return;
+   if(!day||!site)return;
    if(!draft[id])draft[id]={};
-   draft[id][day]=site;
+   if(id)draft[id][day]=site;
  });
  state.scheduleDrafts=state.scheduleDrafts||{};
  state.scheduleDrafts[key]=draft;
  state.scheduleWeekOf=key;
  persistScheduleDrafts();
- // Only the UI/date state is cached. Never push scheduleDrafts to Firebase.
  cacheState();
  return draft;
 }
@@ -465,13 +448,7 @@ function savedScheduleWeeks(){
  const keys=new Set();
  state.employees.forEach(e=>{
    const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?e.weeklySchedules:{};
-   Object.entries(weekly).forEach(([k,days])=>{
-     if(!/^\d{4}-\d{2}-\d{2}$/.test(k)||!days||typeof days!=="object")return;
-     // A week counts as SAVED only when at least one real assignment exists.
-     // Empty placeholder objects from older builds must never appear as saved weeks.
-     const hasAssignment=WEEKDAYS.slice(1).some(day=>SCHEDULE_SITE_OPTIONS.includes(days[day])&&days[day]!=="");
-     if(hasAssignment)keys.add(k);
-   });
+   Object.keys(weekly).forEach(k=>{if(/^\d{4}-\d{2}-\d{2}$/.test(k))keys.add(k);});
  });
  return [...keys].sort();
 }
@@ -607,10 +584,8 @@ function renderSchedules(){
 async function saveRosterSchedule(){
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||today());
  const assignments=scheduleRosterAssignments();
- const hasAssignments=Object.keys(assignments).length>0;
  const updating=scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf;
  if(scheduleMode==="scheduled"&&!updating){alert("Click EDIT on a saved week before updating it.");return;}
- if(!hasAssignments){alert("Nothing is selected yet. Choose at least one employee/site or Day Off before saving the schedule.");return;}
  try{
    const duplicateDays=[];
    WEEKDAYS.slice(1).forEach(day=>{
@@ -779,7 +754,7 @@ function refresh(){
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
- renderSettings();
+ if(typeof renderSettings==="function")renderSettings();
  const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  wrapAllTableScrolls();
