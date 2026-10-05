@@ -1,10 +1,23 @@
 const KEY="bigguys_dtr_v2";
 const MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 const DTR_WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function mondayOfWeekISO(date){
+ const d=new Date(String(date||today())+"T00:00:00");
+ const day=d.getDay();
+ const diff=day===0?-6:1-day;
+ d.setDate(d.getDate()+diff);
+ const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");
+ return `${y}-${m}-${dd}`;
+}
 function scheduledSiteIdForEmployee(employee,date=today()){
  const day=DTR_WEEKDAYS[new Date(date+"T00:00:00").getDay()];
- const weekly=employee?.weeklySchedule&&typeof employee.weeklySchedule==="object"?employee.weeklySchedule:{};
- const value=weekly[day];
+ // The Schedule page stores saved schedules by Monday-of-week in weeklySchedules.
+ // DTR must read that same source of truth immediately, rather than the legacy
+ // weeklySchedule field, otherwise a newly saved schedule can appear ignored.
+ const weekKey=mondayOfWeekISO(date);
+ const savedWeeks=employee?.weeklySchedules&&typeof employee.weeklySchedules==="object"?employee.weeklySchedules:{};
+ const savedWeek=savedWeeks?.[weekKey]&&typeof savedWeeks[weekKey]==="object"?savedWeeks[weekKey]:null;
+ const value=savedWeek ? savedWeek[day] : (employee?.weeklySchedule&&typeof employee.weeklySchedule==="object"?employee.weeklySchedule[day]:"");
  if(value==="off")return "";
  if(value&&window.BIGGUYS_DTR_SITES?.[value])return value;
  return employee?.siteId&&window.BIGGUYS_DTR_SITES?.[employee.siteId]?employee.siteId:"";
