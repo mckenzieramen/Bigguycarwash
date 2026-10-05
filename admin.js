@@ -20,6 +20,7 @@ let scheduleModeInitialized=false;
 let scheduleEditingWeek="";
 let scheduleDraftActive=false;
 let scheduleDraftWeek="";
+let scheduleSelectedDate="";
 let scheduleUiStateLoaded=false;
 let attendanceCaptureDisplayedKey=null;
 let selectedDtrEmployeeId="";
@@ -277,14 +278,20 @@ async function markEmployeeExcuse(employeeId,date){
  }catch(err){console.error("Mark excuse failed",err);alert(`Unable to mark excuse: ${err?.code||err?.message||err}`);}
 }
 function mondayOfWeek(dateValue){
- const d=new Date((dateValue||today())+"T00:00:00");
- const day=d.getDay();
+ const raw=/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue||""))?String(dateValue):today();
+ const [y,m,d0]=raw.split("-").map(Number);
+ const d=new Date(Date.UTC(y,m-1,d0));
+ const day=d.getUTCDay();
  const diff=day===0?-6:1-day;
- d.setDate(d.getDate()+diff);
+ d.setUTCDate(d.getUTCDate()+diff);
  return d.toISOString().slice(0,10);
 }
 function addDaysISO(dateValue,offset){
- const d=new Date(dateValue+"T00:00:00");d.setDate(d.getDate()+offset);return d.toISOString().slice(0,10);
+ const raw=/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue||""))?String(dateValue):today();
+ const [y,m,d0]=raw.split("-").map(Number);
+ const d=new Date(Date.UTC(y,m-1,d0));
+ d.setUTCDate(d.getUTCDate()+Number(offset||0));
+ return d.toISOString().slice(0,10);
 }
 function prettyScheduleDate(dateValue){
  return new Date(dateValue+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});
@@ -353,14 +360,17 @@ function loadScheduleUiState(){
     return {
       mode:raw.mode==="scheduled"?"scheduled":"create",
       week:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.week||""))?mondayOfWeek(raw.week):"",
+      selectedDate:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.selectedDate||""))?String(raw.selectedDate):"",
       editingWeek:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.editingWeek||""))?mondayOfWeek(raw.editingWeek):""
     };
   }catch(err){return null;}
 }
 function persistScheduleUiState(){
   try{
-    const week=mondayOfWeek($("scheduleWeekOf")?.value||state.scheduleWeekOf||today());
-    localStorage.setItem(SCHEDULE_UI_STATE_KEY,JSON.stringify({mode:scheduleMode,week,editingWeek:scheduleEditingWeek||"",draftActive:scheduleDraftActive===true,draftWeek:scheduleDraftWeek||""}));
+    const selectedDate=$("scheduleWeekOf")?.value||scheduleSelectedDate||state.scheduleWeekOf||today();
+    const week=mondayOfWeek(selectedDate);
+    scheduleSelectedDate=selectedDate;
+    localStorage.setItem(SCHEDULE_UI_STATE_KEY,JSON.stringify({mode:scheduleMode,week,selectedDate,editingWeek:scheduleEditingWeek||"",draftActive:scheduleDraftActive===true,draftWeek:scheduleDraftWeek||""}));
   }catch(err){console.warn("Schedule UI state local save skipped:",err);}
 }
 function restoreScheduleUiState(){
@@ -371,7 +381,9 @@ function restoreScheduleUiState(){
     scheduleEditingWeek=saved.editingWeek||"";
     scheduleDraftActive=saved.draftActive===true;
     scheduleDraftWeek=saved.draftWeek||"";
-    if(saved.week){state.scheduleWeekOf=saved.week;if($("scheduleWeekOf"))$("scheduleWeekOf").value=saved.week;}
+    scheduleSelectedDate=saved.selectedDate||saved.week||"";
+    if(scheduleSelectedDate && $("scheduleWeekOf"))$("scheduleWeekOf").value=scheduleSelectedDate;
+    if(saved.week)state.scheduleWeekOf=saved.week;
   }
   scheduleUiStateLoaded=true;
 }
@@ -474,6 +486,7 @@ function createNewSchedule(){
  scheduleEditingWeek="";
  const week=nextCreateScheduleWeek();
  if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
+ scheduleSelectedDate=week;
  state.scheduleWeekOf=week;
  scheduleDraftActive=true;
  scheduleDraftWeek=week;
@@ -509,6 +522,7 @@ function renderSavedScheduleWeeks(){
    scheduleDraftWeek="";
    scheduleBlankDraft=false;
    state.scheduleWeekOf=week;
+   scheduleSelectedDate=week;
    if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
    scheduleMode="scheduled";
    scheduleModeInitialized=true;
@@ -558,9 +572,10 @@ function renderSavedScheduleWeeks(){
 function renderSchedules(){
  restoreScheduleUiState();
  const weekInput=$("scheduleWeekOf");
- if(weekInput && !weekInput.value)weekInput.value=state.scheduleWeekOf||today();
- const weekOf=mondayOfWeek(weekInput?.value||state.scheduleWeekOf||today());
- if(weekInput)weekInput.value=weekOf;
+ if(weekInput && !weekInput.value)weekInput.value=scheduleSelectedDate||state.scheduleWeekOf||today();
+ const selectedDate=weekInput?.value||scheduleSelectedDate||state.scheduleWeekOf||today();
+ scheduleSelectedDate=selectedDate;
+ const weekOf=mondayOfWeek(selectedDate);
  state.scheduleWeekOf=weekOf;
  if(!scheduleModeInitialized){
    const savedWeeks=savedScheduleWeeks();
@@ -1347,8 +1362,8 @@ $("scheduleWeekOf")?.addEventListener("change",()=>{
  const previous=state.scheduleWeekOf||$("scheduleWeekOf")?.value||today();
  if(scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(previous);
  const selected=$("scheduleWeekOf")?.value||today();
+ scheduleSelectedDate=selected;
  const weekOf=mondayOfWeek(selected);
- if($("scheduleWeekOf"))$("scheduleWeekOf").value=weekOf;
  state.scheduleWeekOf=weekOf;
  if(scheduleMode==="scheduled"){
    scheduleEditingWeek=hasSavedScheduleForWeek(weekOf)?weekOf:"";
