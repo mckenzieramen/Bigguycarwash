@@ -1,9 +1,0 @@
-V94 — Admin Remember Me / Device-Scoped Login Persistence
-- Added “Remember me on this device” to Admin Login.
-- When checked, Firebase Auth uses LOCAL persistence on that browser/device so a reload does not log the admin out and the session can survive browser restarts.
-- When unchecked, Firebase Auth uses SESSION persistence for the current browser session only.
-- Password is never stored in localStorage/sessionStorage.
-- Remembered authentication is device/browser scoped by Firebase; another device/browser does not inherit the login session or credentials.
-- Added automatic admin session restoration after page reload when a valid remembered Firebase admin session exists.
-- Explicit Logout signs out Firebase and returns to the login screen.
-- Preserved existing V93 employee recovery, schedule, DTR, sales, payroll, face, and reporting functionality.

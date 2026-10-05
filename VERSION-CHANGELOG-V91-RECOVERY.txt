@@ -1,9 +1,0 @@
-V91 RECOVERY PATCH — 2026-10-05
-
-- Added safe employee-list recovery fallback when bigguys_employees is accidentally empty/deleted.
-- Reconstructs employee selector/list IDs from surviving bigguys_faces records and cross-checks attendance/sales records.
-- Keeps existing employee documents authoritative when present.
-- Recovered employees are temporary UI records and are NOT automatically written over or deleted in Firestore.
-- Recovered employee IDs now populate Employee List, DTR dropdown, Sales employee dropdown, Enrollment dropdown, payroll/report lists, and schedule roster.
-- Preserved surviving face embeddings, attendance, sales, reports, and schedule data.
-- Guarded the missing renderSettings call so Admin refresh no longer crashes with ReferenceError when that optional renderer is absent.

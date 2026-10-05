@@ -1,9 +1,0 @@
-V90 - 2026-10-05
-
-Schedule Scheduled Edit/Delete Reliability Fix
-- EDIT now explicitly loads only the selected saved week.
-- EDIT disables the Create Schedule draft state so old draft data cannot override the saved week.
-- UPDATE SCHEDULE is enabled immediately after a valid saved week is selected.
-- Scheduled category remains a list view until the administrator explicitly clicks EDIT.
-- DELETE now uses the fresh Firebase result as the source of truth after removing the selected week's weeklySchedules data from employee records.
-- Existing attendance, sales, payroll, employees, face enrollment, and other project logic preserved.
