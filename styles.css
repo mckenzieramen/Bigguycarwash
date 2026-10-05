@@ -216,3 +216,6 @@ input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #2
 .schedule-saved-weeks{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:8px}.saved-week-btn{border:1px solid #23445f;background:#081a2a;color:#dceaf5;border-radius:7px;padding:6px 9px;font-size:10px;font-weight:800;cursor:pointer}.saved-week-btn:hover,.saved-week-btn.active{border-color:#1687ff;background:#0b2a47;color:#fff}
 
 .schedule-editor-empty{padding:22px 16px;border:1px dashed #23445f;border-radius:10px;background:#06131f;text-align:center}.schedule-editor-empty strong{display:block;color:#dceaf5;font-size:12px}.schedule-editor-empty span{display:block;color:#7891a6;font-size:10px;margin-top:5px}
+
+/* Site 1 map link */
+.site-map-link{color:#64b6ff;text-decoration:underline;font-weight:900;white-space:nowrap}.site-map-link:hover{color:#fff}
