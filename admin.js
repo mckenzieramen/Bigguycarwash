@@ -290,11 +290,18 @@ function prettyScheduleDate(dateValue){
  return new Date(dateValue+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));}
+function displayEmployeeName(e){
+ const first=String(e?.firstName||"").trim(), last=String(e?.lastName||"").trim();
+ const full=[first,last].filter(Boolean).join(" ").trim();
+ const name=String(e?.name||"").trim();
+ if(full) return full;
+ if(name && !/^Employee\s+\d{6,}$/i.test(name)) return name;
+ return "Name not restored";
+}
 function employeeOptions(selected=""){
  return '<option value=""></option>'+state.employees.map(e=>{
-   const label=String(e.name||e.id||"").trim()||String(e.id||"");
-   const suffix=e.recovered&&/^Employee\s+\d{6,}$/i.test(label)?" — SET NAME":"";
-   return `<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${escapeHtml(label)}${suffix}</option>`;
+   const label=displayEmployeeName(e);
+   return `<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${escapeHtml(label)}</option>`;
  }).join("");
 }
 async function setRecoveredEmployeeName(employeeId){
@@ -792,14 +799,14 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> ${e.recovered?`<button class="name-employee" data-id="${e.id}">NAME</button>`:""} <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[displayEmployeeName(e),e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="name-employee" data-id="${e.id}">${e.recovered||!String(e.firstName||e.lastName||e.name||"").trim()||/^Employee\s+\d{6,}$/i.test(String(e.name||""))?"EDIT NAME":"EDIT NAME"}</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".name-employee").forEach(btn=>btn.onclick=()=>setRecoveredEmployeeName(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
  if(typeof renderSettings==="function")renderSettings();
- const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
+ const opts=state.employees.map(e=>`<option value="${e.id}">${escapeHtml(displayEmployeeName(e))}</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  wrapAllTableScrolls();
  bindHorizontalScrollPersistence();
@@ -1158,7 +1165,7 @@ function renderEmployeeDtr(id){
 function refreshDtrSelector(){
  const select=$("dtrEmployeeSelect"); if(!select)return;
  const current=selectedDtrEmployeeId||select.value||"";
- select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${e.name} — ${e.id}</option>`).join("");
+ select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${escapeHtml(displayEmployeeName(e))}</option>`).join("");
  if(state.employees.some(e=>String(e.id)===String(current))){select.value=current;renderEmployeeDtr(current);}else{select.value="";selectedDtrEmployeeId="";renderEmployeeDtr("");}
 }
 
