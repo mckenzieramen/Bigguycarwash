@@ -70,11 +70,15 @@
       if(meta.hireDate && !cur.hireDate)cur.hireDate=meta.hireDate;
       recoveredById.set(id,cur);
     };
-    faces.forEach(r=>addRecovered(r.employeeId||r.id,r));
+    faces.forEach(r=>addRecovered(r.employeeId||r.id,{...r,name:r.name||r.employeeName||r.fullName||r.displayName,firstName:r.firstName,lastName:r.lastName,type:r.type,start:r.start,hireDate:r.hireDate}));
     attendance.forEach(r=>addRecovered(r.employeeId,{name:r.employeeName||r.name,firstName:r.firstName,lastName:r.lastName,type:r.employeeType||r.type,start:r.employeeStart||r.start,hireDate:r.hireDate}));
     sales.forEach(r=>addRecovered(r.employeeId,{name:r.employeeName||r.name,firstName:r.firstName,lastName:r.lastName}));
     const recoveredEmployees=[...recoveredById.values()].map(e=>({...e,name:e.name||`Employee ${e.id}`,type:['full','semi','part'].includes(e.type)?e.type:'part',start:e.start||'08:00',weeklySchedules:e.weeklySchedules||{},weeklySchedule:e.weeklySchedule||{Monday:'',Tuesday:'',Wednesday:'',Thursday:'',Friday:'',Saturday:'',Sunday:''},offDays:Array.isArray(e.offDays)?e.offDays:[]}));
-    const effectiveEmployees=employees.length?employees:recoveredEmployees;
+    // Merge real employee documents with recovered IDs from surviving face/attendance/sales
+    // records. This is important after an accidental collection deletion: creating one
+    // recovered employee must not make the other recovered employees disappear.
+    const recoveredOnly=recoveredEmployees.filter(r=>!employees.some(e=>String(e?.id||e?.employeeId||'')===String(r.id)));
+    const effectiveEmployees=[...employees,...recoveredOnly];
     const faceMap={},faceTimes={};
     // Resolve each face document to the REAL employee ID. Some older records can
     // contain an employeeId field that is stale/mismatched while the Firestore

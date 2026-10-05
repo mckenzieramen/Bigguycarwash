@@ -289,9 +289,31 @@ function addDaysISO(dateValue,offset){
 function prettyScheduleDate(dateValue){
  return new Date(dateValue+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});
 }
+function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));}
 function employeeOptions(selected=""){
- return '<option value=""></option>'+state.employees.map(e=>`<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${String(e.name||e.id).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}</option>`).join("");
+ return '<option value=""></option>'+state.employees.map(e=>{
+   const label=String(e.name||e.id||"").trim()||String(e.id||"");
+   const suffix=e.recovered&&/^Employee\s+\d{6,}$/i.test(label)?" — SET NAME":"";
+   return `<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${escapeHtml(label)}${suffix}</option>`;
+ }).join("");
 }
+async function setRecoveredEmployeeName(employeeId){
+ const emp=state.employees.find(e=>String(e.id)===String(employeeId));
+ if(!emp)return;
+ const current=String(emp.name||"").replace(/^Employee\s+\d{6,}$/i,"").trim();
+ const name=window.prompt(`Enter the employee name for ${emp.id}:`,current);
+ if(name===null)return;
+ const cleanName=name.trim();
+ if(!cleanName){alert("Please enter a name.");return;}
+ try{
+   const updated={...emp,name:cleanName,firstName:cleanName.split(/\s+/)[0]||cleanName,lastName:cleanName.split(/\s+/).slice(1).join(" ")||"",recovered:false};
+   if(window.BigGuysCloud?.saveEmployee) state=await window.BigGuysCloud.saveEmployee(updated);
+   else state.employees=state.employees.map(e=>String(e.id)===String(employeeId)?updated:e);
+   cacheState();
+   refresh();
+ }catch(err){console.error("Recovered employee name save failed:",err);alert(`Unable to save employee name: ${err?.code||err?.message||err}`);}
+}
+
 function scheduleRosterAssignments(){
  const out={};
  document.querySelectorAll('#scheduleRoster [data-roster-site][data-roster-day]').forEach(sel=>{
@@ -564,18 +586,28 @@ function renderSchedules(){
  state.scheduleWeekOf=weekOf;
  if(!scheduleModeInitialized){
    const savedWeeks=savedScheduleWeeks();
-   if(scheduleMode==="scheduled" && (!savedWeeks.length || !hasSavedScheduleForWeek(weekOf))){
-     scheduleMode=savedWeeks.length?"scheduled":"create";
-     if(scheduleMode==="scheduled")scheduleEditingWeek="";
+   if(scheduleMode==="scheduled" && savedWeeks.length){
+     // On a fresh reload, Scheduled opens the newest saved week so the full table
+     // is visible again. A week remains editable only after this explicit load.
+     const latest=savedWeeks[savedWeeks.length-1];
+     scheduleEditingWeek=latest;
+     state.scheduleWeekOf=latest;
+     if(weekInput)weekInput.value=latest;
+   }else if(scheduleMode==="scheduled"&&!savedWeeks.length){
+     scheduleMode="create";
+     scheduleEditingWeek="";
    }
    scheduleModeInitialized=true;
  }
- if(scheduleMode==="create")scheduleBlankDraft=!scheduleDraftForWeek(weekOf);
- else scheduleBlankDraft=!hasSavedScheduleForWeek(weekOf);
+ const activeWeek=mondayOfWeek($("scheduleWeekOf")?.value||state.scheduleWeekOf||today());
+ state.scheduleWeekOf=activeWeek;
+ if($("scheduleWeekOf"))$("scheduleWeekOf").value=activeWeek;
+ if(scheduleMode==="create")scheduleBlankDraft=!scheduleDraftForWeek(activeWeek);
+ else scheduleBlankDraft=!hasSavedScheduleForWeek(activeWeek);
  renderSavedScheduleWeeks();
  setScheduleMode(scheduleMode);
  const saveBtn=$("saveRosterSchedule");
- const canEdit=scheduleMode==="create" || (scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf&&hasSavedScheduleForWeek(weekOf));
+ const canEdit=scheduleMode==="create" || (scheduleMode==="scheduled"&&scheduleEditingWeek===activeWeek&&hasSavedScheduleForWeek(activeWeek));
  if(saveBtn){saveBtn.textContent=scheduleMode==="scheduled"?"UPDATE SCHEDULE":"SAVE SCHEDULE";saveBtn.disabled=!canEdit;}
  renderScheduleRoster();
  persistScheduleUiState();
@@ -598,6 +630,8 @@ async function saveRosterSchedule(){
      });
    });
    if(duplicateDays.length){ alert(`A person can only be scheduled once per day. Please fix: ${[...new Set(duplicateDays)].join(", ")}.`); return; }
+   const selectedCount=[...document.querySelectorAll('#scheduleRoster select[data-roster-site][data-roster-day]')].filter(sel=>String(sel.value||"")).length;
+   if(!selectedCount){ alert("Nothing is assigned yet. Select at least one employee or Day Off before saving this week."); return; }
 
    const selectedByDay={};
    WEEKDAYS.slice(1).forEach(day=>{
@@ -615,6 +649,14 @@ async function saveRosterSchedule(){
      return {...e,weeklySchedules};
    });
    if(window.BigGuysCloud?.saveScheduleWeek){
+     // Recovered employees came from surviving face/attendance records and may not yet
+     // have a document in bigguys_employees after the accidental collection deletion.
+     // Upsert them first so the saved schedule has a durable employee record.
+     for(const employee of employees){
+       if(employee?.recovered && window.BigGuysCloud?.saveEmployee){
+         state=await window.BigGuysCloud.saveEmployee(employee);
+       }
+     }
      const scheduleMap={};
      employees.forEach(employee=>{scheduleMap[String(employee.id)]=employee.weeklySchedules?.[weekOf]||{};});
      const fresh=await window.BigGuysCloud.saveScheduleWeek(weekOf,scheduleMap);
@@ -647,7 +689,8 @@ function renderScheduleRoster(){
  const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
  const dayColors={Monday:"mon",Tuesday:"tue",Wednesday:"wed",Thursday:"thu",Friday:"fri",Saturday:"sat",Sunday:"sun"};
  const siteOrder=["site1","site2","site3","off"];
- const rowLimits={site1:10,site2:5,site3:5,off:5};
+ const rosterRows=Math.max(state.employees.length,5);
+ const rowLimits={site1:rosterRows,site2:rosterRows,site3:rosterRows,off:rosterRows};
  const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
  const draft=(scheduleMode==="create" && scheduleDraftActive && scheduleDraftWeek===weekOf)?draftAssignmentsForWeek(weekOf):null;
  const viewingSavedWeek=scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf&&hasSavedScheduleForWeek(weekOf);
@@ -749,9 +792,10 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> ${e.recovered?`<button class="name-employee" data-id="${e.id}">NAME</button>`:""} <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
+document.querySelectorAll(".name-employee").forEach(btn=>btn.onclick=()=>setRecoveredEmployeeName(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
  if(typeof renderSettings==="function")renderSettings();
@@ -1348,17 +1392,19 @@ $("scheduleModeCreate")?.addEventListener("click",createNewSchedule);
 $("createAnotherSchedule")?.addEventListener("click",createNewSchedule);
 $("scheduleModeScheduled")?.addEventListener("click",()=>{
  if(scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());
- // Opening the Scheduled category is a list view. Do not load a week until
- // the user explicitly clicks EDIT.
- scheduleEditingWeek="";
+ const weeks=savedScheduleWeeks();
+ const latest=weeks.length?weeks[weeks.length-1]:"";
+ scheduleEditingWeek=latest;
  scheduleDraftActive=false;
  scheduleDraftWeek="";
- scheduleBlankDraft=true;
+ scheduleBlankDraft=!latest;
  scheduleMode="scheduled";
+ if(latest){state.scheduleWeekOf=latest;if($("scheduleWeekOf"))$("scheduleWeekOf").value=latest;}
  persistScheduleUiState();
  setScheduleMode("scheduled");
  renderSavedScheduleWeeks();
  renderScheduleRoster();
+ const saveBtn=$("saveRosterSchedule"); if(saveBtn){saveBtn.textContent=latest?"UPDATE SCHEDULE":"SAVE SCHEDULE";saveBtn.disabled=!latest;}
 });
 $("saveRosterSchedule")?.addEventListener("click",saveRosterSchedule);
 
@@ -1404,7 +1450,9 @@ function startClock(){
 }
 // Keep the admin clock/date live even after tab restore, browser sleep, or visibility changes.
 startClock();
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)startClock();});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)startClock();else if(scheduleMode==="create"&&$("scheduleRoster"))captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());});
+window.addEventListener("beforeunload",()=>{if(scheduleMode==="create"&&$("scheduleRoster"))captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());});
+window.addEventListener("pagehide",()=>{if(scheduleMode==="create"&&$("scheduleRoster"))captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());});
 function activateTab(tab){
  if(tab!=="schedules" && scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());
  document.querySelectorAll(".side-nav[data-tab]").forEach(x=>x.classList.toggle("active",x.dataset.tab===tab));
