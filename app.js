@@ -14,6 +14,9 @@ function employeeSiteName(employee,date=today()){const id=employeeSiteId(employe
 async function verifyEmployeeSite(employee){
  const siteId=employeeSiteId(employee);
  if(!siteId||!window.BIGGUYS_DTR_SITES?.[siteId])return false;
+ // Strictly require the employee's assigned site to match the site where the device is located.
+ // Being inside another approved site is NOT sufficient.
+ if(window.BIGGUYS_DTR_IS_AT_ASSIGNED_SITE)return await window.BIGGUYS_DTR_IS_AT_ASSIGNED_SITE(siteId);
  if(window.BIGGUYS_DTR_IS_AT_SITE)return await window.BIGGUYS_DTR_IS_AT_SITE(siteId);
  return false;
 }
@@ -37,7 +40,7 @@ function startDtrClock(){clearInterval(window.bigGuysDtrClock);updateDtrClock();
 startDtrClock();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)startDtrClock();});
 function setOval(status){const oval=$("ovalFrame");oval.classList.remove("oval-red","oval-green");oval.classList.add(status==="good"?"oval-green":"oval-red")}
-function resetRecognition(message="Place your face inside the oval."){if(window.BIGGUYS_DTR_SET_ASSIGNED_SITE)window.BIGGUYS_DTR_SET_ASSIGNED_SITE(null);recognizedEmployee=null;validSince=0;captureBusy=false;if(recognitionToastTimer){clearTimeout(recognitionToastTimer);recognitionToastTimer=null;}$("cameraStatus").textContent=message;$("recognized").classList.add("hidden");$("timeIn").disabled=true;$("timeOut").disabled=true}
+function resetRecognition(message="Place your face inside the oval."){recognizedEmployee=null;validSince=0;captureBusy=false;if(recognitionToastTimer){clearTimeout(recognitionToastTimer);recognitionToastTimer=null;}$("cameraStatus").textContent=message;$("recognized").classList.add("hidden");$("timeIn").disabled=true;$("timeOut").disabled=true}
 async function loadModels(){
  if(modelsReady)return true;
  if(typeof faceapi==="undefined"){$("cameraStatus").textContent="Face recognition library did not load. Refresh the page.";setOval("bad");return false}
@@ -274,9 +277,37 @@ async function record(type){
  recordBusy=false;
  clearAfterAttendance("🔴 Attendance saved — scanning for the next employee…");
 }
-$("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");async function initCloud(){
+$("timeIn").onclick=()=>record("in");$("timeOut").onclick=()=>record("out");async function handleRemoteDtrState(remote){
+ if(!remote||typeof remote!=="object")return;
+ const previous=state;
+ state=remote;
+ cacheState();
+ // Firestore listeners deliver schedule/employee changes in near-real-time.
+ // If the currently recognized employee's schedule changes, immediately
+ // switch the live geofence to the new assigned site and re-check GPS.
+ if(recognizedEmployee?.id){
+  const updated=(state.employees||[]).find(e=>String(e?.id)===String(recognizedEmployee.id));
+  if(updated){
+   recognizedEmployee=updated;
+   const newSite=employeeSiteId(updated);
+   if(window.BIGGUYS_DTR_SET_ASSIGNED_SITE)window.BIGGUYS_DTR_SET_ASSIGNED_SITE(newSite||null);
+   if(newSite){
+    const ok=await verifyEmployeeSite(updated);
+    if(!ok){
+     if(window.lockDtrForLocation)window.lockDtrForLocation(`Your schedule changed to ${employeeSiteName(updated)}, and your current location is not inside that assigned site.`);
+     else if(window.BIGGUYS_DTR_LOCATION_CHECK)window.BIGGUYS_DTR_LOCATION_CHECK();
+    }else if($("cameraStatus")){
+     $("cameraStatus").textContent=`✓ Schedule updated live — ${employeeSiteName(updated)} is your assigned site.`;
+    }
+   }else{
+    if(window.lockDtrForLocation)window.lockDtrForLocation(`Your schedule changed to OFF for today. DTR is locked until you have an assigned work site.`);
+   }
+  }
+ }
+}
+async function initCloud(){
  if(!window.BigGuysCloud)return false;
- const ok=await window.BigGuysCloud.init(state,remote=>{ state=remote; cacheState(); });
+ const ok=await window.BigGuysCloud.init(state,remote=>{ handleRemoteDtrState(remote).catch(err=>console.warn("Live DTR state update failed:",err)); });
  if(!ok){
    const cloudErr=window.BIGGUYS_CLOUD?.lastSyncError;
    const code=cloudErr?.code||cloudErr?.message||"unknown Firebase error";

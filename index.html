@@ -119,6 +119,7 @@
     if(locationError)locationError.textContent='Return to your assigned approved site to unlock DTR again.';
     if(retry){retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';}
   }
+  window.lockDtrForLocation=lockDtrForLocation;
   function checkLocation(){
     window.__DTR_LOCATION_OK__=false;window.__DTR_CURRENT_SITE_ID__=null;
     locationError.textContent='';locationMessage.textContent='Checking your current GPS location. Location access is required before the DTR password and face scanner can open.';retry.disabled=true;retry.textContent='CHECKING LOCATION…';
@@ -143,10 +144,11 @@
     },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
   }
   let locationWatchId=null;
+  let locationPollTimer=null;
   let assignedSiteIdForWatch=null;
   function startLocationWatch(){
     if(locationWatchId!==null||!navigator.geolocation)return;
-    locationWatchId=navigator.geolocation.watchPosition(pos=>{
+    const evaluatePosition=(pos)=>{
       const {latitude,longitude}=pos.coords;
       const best=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch]
         ? (()=>{const site=window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch];const n=nearestForSite(latitude,longitude,site);return {id:assignedSiteIdForWatch,site,distance:n.distance,lat:n.lat,lng:n.lng};})()
@@ -157,14 +159,37 @@
       }
       window.__DTR_LOCATION_OK__=true;
       window.__DTR_CURRENT_SITE_ID__=best.id;
-    },()=>{}, {enableHighAccuracy:true,timeout:10000,maximumAge:0});
+    };
+    locationWatchId=navigator.geolocation.watchPosition(evaluatePosition,()=>{}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+    clearInterval(locationPollTimer);
+    locationPollTimer=setInterval(()=>{
+      if(document.hidden||!navigator.geolocation)return;
+      navigator.geolocation.getCurrentPosition(evaluatePosition,()=>{}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+    },3000);
   }
-  function stopLocationWatch(){if(locationWatchId!==null&&navigator.geolocation){navigator.geolocation.clearWatch(locationWatchId);locationWatchId=null;}}
+  function stopLocationWatch(){
+    if(locationWatchId!==null&&navigator.geolocation){navigator.geolocation.clearWatch(locationWatchId);locationWatchId=null;}
+    if(locationPollTimer!==null){clearInterval(locationPollTimer);locationPollTimer=null;}
+  }
   window.BIGGUYS_DTR_LOCATION_CHECK=checkLocation;
   window.BIGGUYS_DTR_DISTANCE_METERS=distanceMeters;
   window.BIGGUYS_DTR_START_LOCATION_WATCH=startLocationWatch;
   window.BIGGUYS_DTR_SET_ASSIGNED_SITE=function(siteId){assignedSiteIdForWatch=siteId&&window.BIGGUYS_DTR_SITES?.[siteId]?siteId:null;};
   window.BIGGUYS_DTR_STOP_LOCATION_WATCH=stopLocationWatch;
+  window.BIGGUYS_DTR_IS_AT_ASSIGNED_SITE=function(siteId){
+    return new Promise(resolve=>{
+      if(!navigator.geolocation||!siteId||!window.BIGGUYS_DTR_SITES[siteId])return resolve(false);
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const {latitude,longitude}=pos.coords;
+        const assigned=window.BIGGUYS_DTR_SITES[siteId];
+        const assignedNearest=nearestForSite(latitude,longitude,assigned);
+        const current=nearestApprovedSite(latitude,longitude);
+        const atAssigned=assignedNearest.distance<=assigned.radius;
+        window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
+        resolve(atAssigned && (!current || current.id===siteId));
+      },()=>resolve(false),{enableHighAccuracy:true,timeout:10000,maximumAge:0});
+    });
+  };
   window.BIGGUYS_DTR_IS_AT_SITE=function(siteId){
     return new Promise(resolve=>{
       if(!navigator.geolocation||!siteId||!window.BIGGUYS_DTR_SITES[siteId])return resolve(false);
