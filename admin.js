@@ -847,27 +847,42 @@ if($("empHireDate")){
  updateEmployeeIdPreview();
 }
 
+async function showAdminDashboardAfterLogin(){
+  $("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");
+  $("loginError").textContent="";refresh();startClock();
+  BigGuysCloud.init(state,remote=>{
+    state=remote;
+    cacheState();
+    scheduleModeInitialized=false;
+    refresh();
+    cleanupExpiredScheduleWeeks();
+  },'admin').catch(err=>{ console.error('Background Firestore sync failed:',err); });
+}
+
+async function restoreAdminSession(){
+  try{
+    if(!window.BigGuysCloud?.configured)return false;
+    await BigGuysCloud.initFirebase?.();
+  }catch(e){}
+  try{
+    if(!window.firebase?.auth)return false;
+    const user=window.firebase.auth().currentUser;
+    if(!user||user.isAnonymous)return false;
+    const profile=await BigGuysCloud.getAdminProfile();
+    if(profile?.role!=='admin'||profile?.active!==true)return false;
+    await showAdminDashboardAfterLogin();
+    return true;
+  }catch(e){ console.warn('Admin session restore skipped:',e); return false; }
+}
+
 $("loginBtn").onclick=async()=>{
-  const email=$("adminEmail").value.trim(),password=$("adminPassword").value;
+  const email=$("adminEmail").value.trim(),password=$("adminPassword").value,rememberMe=!!$("rememberMe")?.checked;
   $("loginBtn").disabled=true;$("loginError").textContent="Signing in…";
   try{
     if(!window.BigGuysCloud?.configured)throw new Error("Firebase is not configured.");
     if(email!==ADMIN_EMAIL)throw new Error("This account is not authorized as the Big Guy's administrator.");
-    await BigGuysCloud.adminLogin(email,password);
-    // Show the dashboard immediately after Firebase Authentication succeeds.
-    // Firestore sync continues in the background so login is not blocked by
-    // network reads/writes.
-    $("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");
-    $("loginError").textContent="";refresh();startClock();
-    BigGuysCloud.init(state,remote=>{
-      state=remote;
-      cacheState();
-      scheduleModeInitialized=false;
-      refresh();
-      cleanupExpiredScheduleWeeks();
-    },'admin').catch(err=>{
-      console.error('Background Firestore sync failed:',err);
-    });
+    await BigGuysCloud.adminLogin(email,password,rememberMe);
+    await showAdminDashboardAfterLogin();
   }catch(err){
     console.error(err);
     $("loginError").textContent=err?.message||"Invalid admin email or password.";
@@ -876,8 +891,9 @@ $("loginBtn").onclick=async()=>{
 $("logoutBtn").onclick=async()=>{
   try{sessionStorage.removeItem(FACE_SCAN_SESSION_KEY);}catch(e){}
   try{await BigGuysCloud.adminLogout();}catch(e){console.warn(e)}
-  $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";document.body.classList.remove("logged-in");
+  $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";$("rememberMe").checked=false;document.body.classList.remove("logged-in");
 };
+window.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>restoreAdminSession(),0); });
 $("employeeForm").onsubmit=async e=>{
  e.preventDefault();
  const btn=e.target.querySelector('button[type="submit"]');
