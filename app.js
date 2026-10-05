@@ -37,7 +37,7 @@ function startDtrClock(){clearInterval(window.bigGuysDtrClock);updateDtrClock();
 startDtrClock();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)startDtrClock();});
 function setOval(status){const oval=$("ovalFrame");oval.classList.remove("oval-red","oval-green");oval.classList.add(status==="good"?"oval-green":"oval-red")}
-function resetRecognition(message="Place your face inside the oval."){recognizedEmployee=null;validSince=0;captureBusy=false;if(recognitionToastTimer){clearTimeout(recognitionToastTimer);recognitionToastTimer=null;}$("cameraStatus").textContent=message;$("recognized").classList.add("hidden");$("timeIn").disabled=true;$("timeOut").disabled=true}
+function resetRecognition(message="Place your face inside the oval."){if(window.BIGGUYS_DTR_SET_ASSIGNED_SITE)window.BIGGUYS_DTR_SET_ASSIGNED_SITE(null);recognizedEmployee=null;validSince=0;captureBusy=false;if(recognitionToastTimer){clearTimeout(recognitionToastTimer);recognitionToastTimer=null;}$("cameraStatus").textContent=message;$("recognized").classList.add("hidden");$("timeIn").disabled=true;$("timeOut").disabled=true}
 async function loadModels(){
  if(modelsReady)return true;
  if(typeof faceapi==="undefined"){$("cameraStatus").textContent="Face recognition library did not load. Refresh the page.";setOval("bad");return false}
@@ -45,6 +45,14 @@ async function loadModels(){
  for(const url of MODEL_URLS){try{await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(url),faceapi.nets.faceLandmark68TinyNet.loadFromUri(url),faceapi.nets.faceRecognitionNet.loadFromUri(url)]);modelsReady=true;return true}catch(err){console.warn("Face model source failed:",url,err)}}
  $("cameraStatus").textContent="Face recognition model could not load. Check your internet connection and refresh.";setOval("bad");return false;
 }
+function stopDtrForLocation(){
+ try{if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}}catch(e){}
+ scanning=false;captureBusy=false;recognizedEmployee=null;validSince=0;
+ if(window.BIGGUYS_DTR_STOP_LOCATION_WATCH)window.BIGGUYS_DTR_STOP_LOCATION_WATCH();
+ try{if($("camera"))$("camera").srcObject=null;}catch(e){}
+ resetRecognition("DTR closed — return to your assigned site to continue.");
+}
+window.stopDtrForLocation=stopDtrForLocation;
 async function startCamera(){
  if(!await loadModels())return;
  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});$("camera").srcObject=stream;$("cameraStatus").textContent="Scanning live — place one face inside the red oval.";setOval("bad");scanLoop()}catch(err){console.error(err);$("cameraStatus").textContent="Camera permission is required.";setOval("bad")}
@@ -135,6 +143,7 @@ async function verifyFace(detection){
    return;
   }
   recognizedEmployee=match.employee;
+  if(window.BIGGUYS_DTR_SET_ASSIGNED_SITE)window.BIGGUYS_DTR_SET_ASSIGNED_SITE(employeeSiteId(match.employee));
   nextRecognitionAt=performance.now()+2000;
   saveFaceSnapshot(match.employee,detection);
   $("employeeName").textContent=match.employee.name;
@@ -294,5 +303,5 @@ async function bootDTR(){
  if(!window.__DTR_ACCESS_UNLOCKED__)return;
  if(await initCloud())startCamera();
 }
-window.addEventListener("dtr-access-unlocked",bootDTR);
+window.addEventListener("dtr-access-unlocked",()=>{if(window.BIGGUYS_DTR_START_LOCATION_WATCH)window.BIGGUYS_DTR_START_LOCATION_WATCH();bootDTR();});
 window.addEventListener("load",bootDTR);
