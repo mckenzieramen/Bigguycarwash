@@ -742,6 +742,18 @@ function bindHorizontalScrollPersistence(){
    try{const saved=Number(sessionStorage.getItem('bigguys_scroll_'+key));if(Number.isFinite(saved)&&saved>0)requestAnimationFrame(()=>{el.scrollLeft=saved;});}catch(e){}
  });
 }
+function renderSettings(){
+ const select=$("settingsEmployee"); if(!select)return;
+ const current=select.value;
+ select.innerHTML='<option value="">Select Employee</option>'+state.employees.map(e=>`<option value="${e.id}">${e.name} — ${e.id}</option>`).join("");
+ if(state.employees.some(e=>String(e.id)===String(current)))select.value=current;
+ const e=state.employees.find(x=>String(x.id)===String(select.value));
+ const wrap=$("employeeOffDays"); if(!wrap)return;
+ const selected=new Set(employeeOffDays(e));
+ wrap.innerHTML=WEEKDAYS.map(day=>`<label class="off-day-option ${selected.has(day)?"selected":""}"><input type="checkbox" value="${day}" ${selected.has(day)?"checked":""}><span>${day}</span></label>`).join("");
+ wrap.querySelectorAll('input[type="checkbox"]').forEach(input=>input.addEventListener("change",()=>input.closest(".off-day-option")?.classList.toggle("selected",input.checked)));
+ $("offDaysSummary").innerHTML=e?`<strong>${e.name}</strong><span>${selected.size?Array.from(selected).join(" • "):"No regular days off selected."}</span>`:"Select an employee to configure days off.";
+}
 function refresh(){
  const __scrollPositions=preserveTableScrollPositions();
  syncStateFromStorage();
