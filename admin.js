@@ -69,7 +69,7 @@ const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth(
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const DTR_SITES={
- site1:{name:"Site 1",lat:14.118861,lng:122.950854,radius:250},
+ site1:{name:"Site 1",lat:14.118861,lng:122.950854,radius:250,mapsUrl:'https://www.google.com/maps/@16.4228131,120.5763998,16z?entry=ttu&g_ep=EgoyMDI2MDkzMC4wIKXMDSoASAFQAw%3D%3D',},
  site2:{name:"Site 2",lat:14.0956367,lng:122.9469572,radius:250},
  site3:{name:"Site 3",lat:14.091233,lng:122.9467024,radius:250}
 };
@@ -695,7 +695,7 @@ function renderScheduleRoster(){
  }
  root.innerHTML=siteOrder.map(siteId=>{
    const site=DTR_SITES[siteId];
-   return makeCard(siteId,site?site.name:"Day Off",site?`${site.lat}, ${site.lng}`:"Employees not scheduled / OFF",site?"WEEKLY ROSTER":"OFF",rowLimits[siteId]);
+   return makeCard(siteId,site?site.name:"Day Off",site?`${site.lat}, ${site.lng}${site.mapsUrl?` · <a class="site-map-link" href="${site.mapsUrl}" target="_blank" rel="noopener noreferrer">OPEN MAP</a>`:""}`:"Employees not scheduled / OFF",site?"WEEKLY ROSTER":"OFF",rowLimits[siteId]);
  }).join("");
  root.querySelectorAll('.site-roster-select').forEach(sel=>sel.addEventListener('change',()=>{syncRosterDuplicateDay(sel);captureCurrentScheduleDraft(weekOf);}));
  normalizeRosterDuplicates();
