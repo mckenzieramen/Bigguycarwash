@@ -495,29 +495,48 @@ function renderSavedScheduleWeeks(){
  }
  const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
  root.innerHTML='<div class="saved-weeks-heading"><strong>Saved weeks</strong><span>Choose EDIT to load that saved week into the table below.</span></div><div class="saved-weeks-list">'+weeks.slice().reverse().map(w=>`<div class="saved-week-item ${w===current?'active':''}"><button type="button" class="saved-week-btn" data-week="${w}"><span>${prettyScheduleDate(w)} – ${prettyScheduleDate(addDaysISO(w,6))}</span><small>EDIT</small></button><button type="button" class="saved-week-delete" data-delete-week="${w}" title="Delete saved schedule">DELETE</button></div>`).join('')+'</div>';
- root.querySelectorAll('.saved-week-btn').forEach(btn=>btn.addEventListener('click',()=>{
-   const week=btn.dataset.week;
+ root.querySelectorAll('.saved-week-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+   const week=mondayOfWeek(btn.dataset.week||today());
+   if(!hasSavedScheduleForWeek(week)){
+     alert("That saved week is no longer available. Refreshing the saved schedule list.");
+     renderSavedScheduleWeeks();
+     return;
+   }
+   // EDIT must load ONLY the selected saved week. It must never reuse the
+   // create-draft buffer or another week's schedule.
    scheduleEditingWeek=week;
-   if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
-   state.scheduleWeekOf=week;
+   scheduleDraftActive=false;
+   scheduleDraftWeek="";
    scheduleBlankDraft=false;
+   state.scheduleWeekOf=week;
+   if($("scheduleWeekOf"))$("scheduleWeekOf").value=week;
+   scheduleMode="scheduled";
+   scheduleModeInitialized=true;
+   persistScheduleUiState();
    setScheduleMode("scheduled");
+   const saveBtn=$("saveRosterSchedule"); if(saveBtn){saveBtn.textContent="UPDATE SCHEDULE";saveBtn.disabled=false;}
    renderScheduleRoster();
    renderSavedScheduleWeeks();
-   const saveBtn=$("saveRosterSchedule"); if(saveBtn)saveBtn.textContent="UPDATE SCHEDULE";
-   persistScheduleUiState();
  }));
  root.querySelectorAll('.saved-week-delete').forEach(btn=>btn.addEventListener('click',async()=>{
    const week=btn.dataset.deleteWeek;
    if(!week)return;
    if(!confirm(`Delete the saved schedule for ${prettyScheduleDate(week)} – ${prettyScheduleDate(addDaysISO(week,6))}? This removes only that weekly schedule, not attendance, sales, payroll, employees, or faces.`))return;
    try{
-     if(window.BigGuysCloud?.deleteScheduleWeek) await window.BigGuysCloud.deleteScheduleWeek(week);
-     state.employees=state.employees.map(e=>{
-       const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
-       delete weekly[week];
-       return {...e,weeklySchedules:weekly};
-     });
+     let fresh=null;
+     if(window.BigGuysCloud?.deleteScheduleWeek){
+       fresh=await window.BigGuysCloud.deleteScheduleWeek(week);
+     }
+     // Firebase is authoritative. Use the fresh cloud result instead of
+     // locally guessing which employee documents changed.
+     if(fresh?.employees) state.employees=fresh.employees;
+     else {
+       state.employees=state.employees.map(e=>{
+         const weekly=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
+         delete weekly[week];
+         return {...e,weeklySchedules:weekly};
+       });
+     }
      clearScheduleDraft(week);
      if(scheduleEditingWeek===week)scheduleEditingWeek="";
      const current=mondayOfWeek($("scheduleWeekOf")?.value||today());
@@ -1329,11 +1348,17 @@ $("scheduleModeCreate")?.addEventListener("click",createNewSchedule);
 $("createAnotherSchedule")?.addEventListener("click",createNewSchedule);
 $("scheduleModeScheduled")?.addEventListener("click",()=>{
  if(scheduleMode==="create" && $("scheduleRoster")) captureCurrentScheduleDraft(state.scheduleWeekOf||$("scheduleWeekOf")?.value||today());
+ // Opening the Scheduled category is a list view. Do not load a week until
+ // the user explicitly clicks EDIT.
  scheduleEditingWeek="";
+ scheduleDraftActive=false;
+ scheduleDraftWeek="";
+ scheduleBlankDraft=true;
+ scheduleMode="scheduled";
+ persistScheduleUiState();
  setScheduleMode("scheduled");
  renderSavedScheduleWeeks();
- scheduleBlankDraft=true;
- renderSchedules();
+ renderScheduleRoster();
 });
 $("saveRosterSchedule")?.addEventListener("click",saveRosterSchedule);
 
