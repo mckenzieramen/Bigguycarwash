@@ -1,0 +1,11 @@
+V91 - 2026-10-05
+
+Schedule Draft Persistence + Saved Schedule Reliability + Donut Fix
+- Create Schedule dropdown selections now persist locally across reloads and admin logout/login on the same device/browser.
+- Restored the saved draft-active/week state so the selections reappear after reload instead of resetting to blank.
+- Schedule drafts remain local-only and are never treated as Firebase saved schedules.
+- Scheduled weeks are listed only when they contain at least one real assignment; empty placeholder weeks from older builds no longer appear as saved schedules.
+- Prevented saving a completely blank schedule, eliminating accidental/phantom saved weeks.
+- Saved Schedule EDIT continues to load only the selected week and can be updated safely.
+- Dashboard Income Breakdown donut now matches the actual category percentages. If all categories are 0, the donut renders as one neutral circle instead of showing fake divisions.
+- Existing attendance, sales, payroll, employee, face enrollment, Firebase sync, and other functionality preserved.
