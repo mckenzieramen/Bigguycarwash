@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Big Guy's — Employee DTR</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-sync.js"></script>
+</head>
+<body>
+<div id="dtrLocationGate" class="dtr-access-gate" role="dialog" aria-modal="true" aria-labelledby="dtrLocationTitle">
+  <div class="dtr-access-card">
+    <div class="dtr-access-icon">📍</div>
+    <span class="dtr-access-kicker">LOCATION CHECK</span>
+    <h2 id="dtrLocationTitle">Checking DTR Location</h2>
+    <p id="dtrLocationMessage">Your location must be inside an approved Big Guy's Carwash site before the DTR password and face scanner can be opened.</p>
+    <div id="dtrLocationError" class="dtr-access-error" role="alert"></div>
+    <button type="button" id="dtrLocationRetry">CHECK LOCATION AGAIN</button>
+  </div>
+</div>
+<div id="dtrAccessGate" class="dtr-access-gate" role="dialog" aria-modal="true" aria-labelledby="dtrAccessTitle">
+  <div class="dtr-access-card">
+    <div class="dtr-access-icon">🔐</div>
+    <span class="dtr-access-kicker">PROTECTED DTR</span>
+    <h2 id="dtrAccessTitle">Employee DTR Access</h2>
+    <p id="dtrAccessMessage">Enter the DTR password to open the employee attendance scanner.</p>
+    <label for="dtrAccessPassword">Password</label>
+    <input id="dtrAccessPassword" type="password" autocomplete="off" placeholder="Enter DTR password">
+    <div id="dtrAccessError" class="dtr-access-error" role="alert"></div>
+    <button type="button" id="dtrUnlockButton">UNLOCK DTR</button>
+  </div>
+</div>
+<main class="dtr-shell">
+<section class="card dtr-card">
+<img src="assets/big-guys-logo.png" class="logo dtr-logo" alt="Big Guy's Carwash">
+<div class="live-time" id="liveTime">--:--:--</div>
+<div class="date" id="liveDate"></div>
+<h1>Employee DTR</h1>
+<p class="muted">Look at the camera and place your face inside the oval. Your face is captured and verified automatically — no capture button is needed.</p>
+
+<div class="camera-box oval-camera">
+  <video id="camera" autoplay muted playsinline></video>
+  <div id="ovalFrame" class="oval-frame oval-red"></div>
+  <div id="cameraStatus" class="camera-status">Starting camera…</div>
+</div>
+
+<div id="recognized" class="recognized hidden">
+  <strong id="employeeName"></strong>
+  <span id="employeeId"></span>
+  <span id="attendanceStatus" class="attendance-status"></span>
+</div>
+
+<div class="button-row">
+  <button type="button" id="timeIn" disabled>TIME IN</button>
+  <button type="button" id="timeOut" disabled>TIME OUT</button>
+</div>
+
+<div id="result"></div>
+<p class="small">No employee ID and no Start Camera button are required. The camera starts automatically.</p>
+
+</section>
+</main>
+<style>
+.dtr-shell.dtr-locked{visibility:hidden;pointer-events:none}.dtr-access-gate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(4,8,18,.94);backdrop-filter:blur(16px)}.dtr-access-gate.hidden{display:none}.dtr-access-card{width:min(420px,100%);padding:32px;border:1px solid rgba(80,150,255,.28);border-radius:24px;background:linear-gradient(145deg,rgba(17,28,52,.98),rgba(7,12,25,.98));box-shadow:0 25px 80px rgba(0,0,0,.55),0 0 40px rgba(40,120,255,.12);color:#fff}.dtr-access-icon{width:52px;height:52px;display:grid;place-items:center;border-radius:16px;background:rgba(54,130,255,.14);font-size:24px;margin-bottom:14px}.dtr-access-kicker{font-size:11px;letter-spacing:.16em;font-weight:800;color:#6fb1ff}.dtr-access-card h2{margin:8px 0 8px;font-size:25px}.dtr-access-card p{margin:0 0 20px;color:#9eacc4;line-height:1.5}.dtr-access-card label{display:block;font-size:12px;font-weight:700;margin-bottom:7px}.dtr-access-card input{width:100%;box-sizing:border-box;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0a1222;color:#fff;outline:none}.dtr-access-card input:focus{border-color:#4d9cff;box-shadow:0 0 0 3px rgba(77,156,255,.12)}.dtr-access-card button{width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:linear-gradient(135deg,#2584ff,#5b4dff);color:#fff;font-weight:800;cursor:pointer}.dtr-access-error{min-height:18px;margin-top:9px;color:#ff7373;font-size:12px}.dtr-access-card button:disabled{opacity:.55;cursor:not-allowed}.dtr-access-unlocked .dtr-access-gate{display:none}@media(max-width:520px){.dtr-access-card{padding:24px;border-radius:20px}}
+</style>
+<script>
+(function(){
+  window.BIGGUYS_DTR_SITES={
+    site1:{name:"Site 1",lat:16.4228131,lng:120.5763998,radius:250,locations:[{lat:16.4228131,lng:120.5763998},{lat:16.422818,lng:120.576396}]},
+    site2:{name:"Site 2",lat:14.0956367,lng:122.9469572,radius:250,locations:[{lat:14.0956367,lng:122.9469572}]},
+    site3:{name:"Site 3",lat:14.091233,lng:122.9467024,radius:250,locations:[{lat:14.091233,lng:122.9467024}]}
+  };
+  const KEY='bigguys_dtr_access_unlocked';
+  const unlocked=()=>{try{return sessionStorage.getItem(KEY)==='1'}catch(e){return false}};
+  const gate=document.getElementById('dtrAccessGate'),locationGate=document.getElementById('dtrLocationGate'),shell=document.querySelector('.dtr-shell');
+  const pass=document.getElementById('dtrAccessPassword'),error=document.getElementById('dtrAccessError'),btn=document.getElementById('dtrUnlockButton');
+  const locationMessage=document.getElementById('dtrLocationMessage'),locationError=document.getElementById('dtrLocationError'),retry=document.getElementById('dtrLocationRetry');
+  window.__DTR_ACCESS_UNLOCKED__=unlocked();
+  window.__DTR_LOCATION_OK__=false;
+  window.__DTR_CURRENT_SITE_ID__=null;
+  shell.classList.add('dtr-locked');
+  gate.classList.remove('hidden');
+  locationGate.classList.remove('hidden');
+  gate.style.display='none';
+  function distanceMeters(lat1,lon1,lat2,lon2){const R=6371000,toRad=v=>v*Math.PI/180,dLat=toRad(lat2-lat1),dLon=toRad(lon2-lon1),a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
+  function siteLocations(site){return Array.isArray(site?.locations)&&site.locations.length?site.locations:[{lat:site.lat,lng:site.lng}];}
+  function nearestForSite(latitude,longitude,site){
+    let best=null;
+    for(const loc of siteLocations(site)){
+      const d=distanceMeters(latitude,longitude,loc.lat,loc.lng);
+      if(!best||d<best.distance)best={distance:d,lat:loc.lat,lng:loc.lng};
+    }
+    return best;
+  }
+  function nearestApprovedSite(latitude,longitude){
+    let best=null;
+    for(const [id,site] of Object.entries(window.BIGGUYS_DTR_SITES)){
+      const n=nearestForSite(latitude,longitude,site);
+      if(!best||n.distance<best.distance)best={id,site,distance:n.distance,lat:n.lat,lng:n.lng};
+    }
+    return best;
+  }
+  function lockDtrForLocation(reason){
+    window.__DTR_LOCATION_OK__=false;
+    window.__DTR_CURRENT_SITE_ID__=null;
+    window.__DTR_ASSIGNED_SITE_ID__=null;
+    try{sessionStorage.removeItem(KEY)}catch(e){}
+    window.__DTR_ACCESS_UNLOCKED__=false;
+    if(window.stopDtrForLocation)window.stopDtrForLocation();
+    if(shell)shell.classList.add('dtr-locked');
+    if(gate){gate.classList.remove('hidden');gate.style.display='none';}
+    if(locationGate)locationGate.classList.remove('hidden');
+    if(locationMessage)locationMessage.textContent=reason||'You left the approved DTR location. DTR has been locked.';
+    if(locationError)locationError.textContent='Return to your assigned site to unlock DTR again.';
+    if(retry){retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';}
+  }
+  window.lockDtrForLocation=lockDtrForLocation;
+  function checkLocation(){
+    window.__DTR_LOCATION_OK__=false;window.__DTR_CURRENT_SITE_ID__=null;
+    locationError.textContent='';locationMessage.textContent='Checking your current GPS location. Location access is required before the DTR password and face scanner can open.';retry.disabled=true;retry.textContent='CHECKING LOCATION…';
+    if(!navigator.geolocation){locationError.textContent='This device/browser does not support GPS location. DTR access is blocked.';retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';return;}
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const {latitude,longitude,accuracy}=pos.coords;
+      const best=nearestApprovedSite(latitude,longitude);
+      if(best&&best.distance<=best.site.radius){
+        window.__DTR_LOCATION_OK__=true;window.__DTR_CURRENT_SITE_ID__=best.id;
+        locationMessage.textContent=`Location verified: ${best.site.name}. GPS accuracy ±${Math.round(accuracy||0)} m. You may now enter the DTR password.`;
+        locationError.textContent='';locationGate.classList.add('hidden');gate.style.display='flex';
+        if(window.__DTR_ACCESS_UNLOCKED__){gate.classList.add('hidden');shell.classList.remove('dtr-locked');window.dispatchEvent(new Event('dtr-access-unlocked'));}
+        else{shell.classList.add('dtr-locked');setTimeout(()=>pass&&pass.focus(),80);}
+      }else{
+        locationMessage.textContent='You are outside the approved DTR locations.';
+        locationError.textContent=`DTR is restricted to Site 1, Site 2, or Site 3. Nearest approved site: ${best?best.site.name:'—'} (${best?Math.round(best.distance):'—'} m away).`;
+        retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';
+      }
+    },err=>{
+      const msg=err.code===1?'Location permission was denied. Please allow location access for this DTR website.':err.code===2?'Your location could not be determined. Turn on GPS/location services and try again.':'Location check timed out. Please try again.';
+      locationError.textContent=msg;retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';
+    },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  }
+  let locationWatchId=null;
+  let locationPollTimer=null;
+  let assignedSiteIdForWatch=null;
+  function startLocationWatch(){
+    if(locationWatchId!==null||!navigator.geolocation)return;
+    const evaluatePosition=(pos)=>{
+      const {latitude,longitude}=pos.coords;
+      const current=nearestApprovedSite(latitude,longitude);
+      const assigned=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch]
+        ? (()=>{const site=window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch];const n=nearestForSite(latitude,longitude,site);return {id:assignedSiteIdForWatch,site,distance:n.distance,lat:n.lat,lng:n.lng};})()
+        : null;
+      window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
+      const best=assigned||current;
+      if(!best||best.distance>best.site.radius){
+        if(window.__DTR_ACCESS_UNLOCKED__||window.__DTR_LOCATION_OK__){
+          const assignedName=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES?.[assignedSiteIdForWatch]?.name;
+          const currentName=current?.site?.name || 'an unapproved location';
+          lockDtrForLocation(assignedName
+            ? `You are not assigned on this site.\n\nCurrent location: ${currentName}\nYou are assigned to: ${assignedName} today.`
+            : 'You moved outside the approved DTR location. DTR has been automatically closed.');
+        }
+        return;
+      }
+      if(assignedSiteIdForWatch && assigned && assigned.distance>assigned.site.radius){
+        lockDtrForLocation(`You are not assigned on this site.\n\nCurrent location: ${current?.site?.name||'another location'}\nYou are assigned to: ${assigned.site.name} today.`);
+        return;
+      }
+      window.__DTR_LOCATION_OK__=true;
+    };
+    locationWatchId=navigator.geolocation.watchPosition(evaluatePosition,()=>{}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+    clearInterval(locationPollTimer);
+    locationPollTimer=setInterval(()=>{
+      if(document.hidden||!navigator.geolocation)return;
+      navigator.geolocation.getCurrentPosition(evaluatePosition,()=>{}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+    },3000);
+  }
+  function stopLocationWatch(){
+    if(locationWatchId!==null&&navigator.geolocation){navigator.geolocation.clearWatch(locationWatchId);locationWatchId=null;}
+    if(locationPollTimer!==null){clearInterval(locationPollTimer);locationPollTimer=null;}
+  }
+  window.BIGGUYS_DTR_LOCATION_CHECK=checkLocation;
+  window.BIGGUYS_DTR_DISTANCE_METERS=distanceMeters;
+  window.BIGGUYS_DTR_START_LOCATION_WATCH=startLocationWatch;
+  window.BIGGUYS_DTR_SET_ASSIGNED_SITE=function(siteId){assignedSiteIdForWatch=siteId&&window.BIGGUYS_DTR_SITES?.[siteId]?siteId:null;};
+  window.BIGGUYS_DTR_STOP_LOCATION_WATCH=stopLocationWatch;
+  window.BIGGUYS_DTR_IS_AT_ASSIGNED_SITE=function(siteId){
+    return new Promise(resolve=>{
+      if(!navigator.geolocation||!siteId||!window.BIGGUYS_DTR_SITES[siteId])return resolve(false);
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const {latitude,longitude}=pos.coords;
+        const assigned=window.BIGGUYS_DTR_SITES[siteId];
+        const assignedNearest=nearestForSite(latitude,longitude,assigned);
+        const current=nearestApprovedSite(latitude,longitude);
+        const atAssigned=assignedNearest.distance<=assigned.radius;
+        window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
+        // The employee is valid if the GPS point is inside the assigned site's
+        // own geofence. Do not reject merely because another approved site is
+        // geographically closer due to GPS accuracy/geofence overlap.
+        resolve(atAssigned);
+      },()=>resolve(false),{enableHighAccuracy:true,timeout:10000,maximumAge:0});
+    });
+  };
+  window.BIGGUYS_DTR_IS_AT_SITE=function(siteId){
+    return new Promise(resolve=>{
+      if(!navigator.geolocation||!siteId||!window.BIGGUYS_DTR_SITES[siteId])return resolve(false);
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const {latitude,longitude}=pos.coords;
+        const s=window.BIGGUYS_DTR_SITES[siteId];
+        const n=nearestForSite(latitude,longitude,s);
+        const nearest=nearestApprovedSite(latitude,longitude);
+        if(nearest)window.__DTR_CURRENT_SITE_ID__=nearest.id;
+        resolve(n.distance<=s.radius);
+      },()=>resolve(false),{enableHighAccuracy:true,timeout:10000,maximumAge:0});
+    });
+  };
+  function unlock(){
+    if(!window.__DTR_LOCATION_OK__){error.textContent='Location must be verified first.';return;}
+    if(pass.value==='123456'){
+      try{sessionStorage.setItem(KEY,'1')}catch(e){}
+      window.__DTR_ACCESS_UNLOCKED__=true; gate.classList.add('hidden'); shell.classList.remove('dtr-locked');window.dispatchEvent(new Event('dtr-access-unlocked'));
+    }else{error.textContent='Incorrect DTR password.';pass.value='';pass.focus()}
+  }
+  btn.addEventListener('click',unlock);pass.addEventListener('keydown',e=>{if(e.key==='Enter')unlock()});retry.addEventListener('click',checkLocation);
+  checkLocation();
+  startLocationWatch();
+  window.addEventListener('pageshow',checkLocation);
+  window.addEventListener('focus',checkLocation);
+})();
+</script>
+<script src="app.js"></script>
+</body>
+</html>
