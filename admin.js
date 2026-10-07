@@ -70,7 +70,7 @@ const today=()=>{const n=new Date();const y=n.getFullYear(),m=String(n.getMonth(
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const DTR_SITES={
- site1:{name:"Site 1",lat:16.422818,lng:120.576396,radius:250},
+ site1:{name:"Site 1",lat:14.118861,lng:122.950854,radius:250},
  site2:{name:"Site 2",lat:14.0956367,lng:122.9469572,radius:250},
  site3:{name:"Site 3",lat:14.091233,lng:122.9467024,radius:250}
 };
@@ -696,7 +696,7 @@ function renderScheduleRoster(){
    }).join("");
  };
  const makeCard=(siteId,title,subtitle,badge,maxRows)=>{
-   const mapUrl=siteId==="site1"?"https://www.google.com/maps/@16.422818,120.576396,16z":"";
+   const mapUrl=siteId==="site1"?"https://www.google.com/maps/@14.118861,122.950854,16z":"";
    const safeSubtitle=mapUrl?`${subtitle} <a href="${mapUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;color:#78b7ff;font-weight:700;text-decoration:none">OPEN SITE 1 MAP ↗</a>`:subtitle;
    return `<div class="site-roster-card ${siteId==="off"?"dayoff-roster-card":""}">
    <div class="site-roster-title"><div><strong>${title}</strong><small>${safeSubtitle}</small></div><span class="site-roster-badge">${badge}</span></div>
