@@ -7,3 +7,12 @@ window.BIGGUYS_FIREBASE_CONFIG = {
   messagingSenderId: "267146668906",
   appId: "1:267146668906:web:ad94aec90fa44d7299313"
 };
+
+/* Employee DTR guided Help tutorial. Kept separate so existing DTR logic remains unchanged. */
+(function () {
+  if (typeof document === 'undefined') return;
+  var script = document.createElement('script');
+  script.src = 'dtr-help.js';
+  script.defer = true;
+  document.head.appendChild(script);
+})();
