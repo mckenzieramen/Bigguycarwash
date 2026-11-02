@@ -16,3 +16,14 @@ window.BIGGUYS_FIREBASE_CONFIG = {
   script.defer = true;
   document.head.appendChild(script);
 })();
+
+/* Admin Dashboard guided tutorial. Additive loader only; existing admin/Firebase features remain unchanged. */
+(function () {
+  if (typeof document === 'undefined' || !document.body || !document.body.classList.contains('admin-body')) return;
+  if (document.querySelector('script[data-bigguys-admin-tour]')) return;
+  var script = document.createElement('script');
+  script.src = 'admin-guided-tour.js?v=20261102-v1';
+  script.defer = true;
+  script.setAttribute('data-bigguys-admin-tour', 'true');
+  document.head.appendChild(script);
+})();
