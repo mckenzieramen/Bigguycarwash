@@ -3,6 +3,7 @@
    does not hit the 1 MiB limit of a single aggregate document. localStorage
    is only a small offline cache; Firebase is authoritative. */
 (function(){
+  const ATTENDANCE_START_DATE='2026-11-03';
   const cfg=window.BIGGUYS_FIREBASE_CONFIG||{};
   const configured=!!(cfg.apiKey&&cfg.authDomain&&cfg.projectId&&cfg.appId);
   let db=null,auth=null,readyPromise=null,unsubscribers=[],refreshTimer=null;
@@ -16,7 +17,7 @@
   };
   const clean=s=>({
     employees:Array.isArray(s?.employees)?s.employees:[],
-    attendance:Array.isArray(s?.attendance)?s.attendance:[],
+    attendance:(Array.isArray(s?.attendance)?s.attendance:[]).filter(row=>row.date>=ATTENDANCE_START_DATE),
     sales:Array.isArray(s?.sales)?s.sales:[],
     faces:s?.faces&&typeof s.faces==='object'&&!Array.isArray(s.faces)?s.faces:{},
     faceUpdatedAt:s?.faceUpdatedAt&&typeof s.faceUpdatedAt==='object'?s.faceUpdatedAt:{},
@@ -211,6 +212,7 @@
   }
   async function saveSale(sale){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!sale?.id)throw new Error('invalid-argument: sale ID is missing.');await db.doc(`${C.sales}/${sale.id}`).set({...sale,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   async function saveAttendance(record,snapshot){
+    if(!record?.date||record.date<ATTENDANCE_START_DATE)throw new Error('Attendance tracking starts November 3, 2026.');
     await initFirebase();
     if(!record?.employeeId)throw new Error('invalid-argument: employee ID is missing.');
     if(!record.id)record={...record,id:`attendance_${String(record.employeeId).replace(/[^a-zA-Z0-9_-]/g,"_")}_${record.date||new Date().toISOString().slice(0,10)}`};
