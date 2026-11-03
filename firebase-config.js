@@ -25,7 +25,7 @@ window.BIGGUYS_FIREBASE_CONFIG = {
   else document.addEventListener('DOMContentLoaded', loadDtrHelp, { once: true });
 })();
 
-/* Admin Dashboard guided tutorial. Additive loader only; existing admin/Firebase features remain unchanged. */
+/* Admin Dashboard guided tutorial + locked schedule draft guard. */
 (function () {
   if (typeof document === 'undefined') return;
   function loadAdminTour() {
@@ -46,4 +46,20 @@ window.BIGGUYS_FIREBASE_CONFIG = {
   }
   if (document.body) loadAdminTour();
   else document.addEventListener('DOMContentLoaded', loadAdminTour, { once: true });
+})();
+
+/* Mobile payroll horizontal scrolling and reload-safe Firebase admin session. */
+(function () {
+  if (typeof document === 'undefined') return;
+  function loadAdminMobileSessionFix() {
+    if (!document.body || !document.body.classList.contains('admin-body')) return;
+    if (document.querySelector('script[data-bigguys-admin-mobile-session]')) return;
+    var script = document.createElement('script');
+    script.src = 'admin-mobile-session-fix.js?v=20261103-v2';
+    script.defer = true;
+    script.setAttribute('data-bigguys-admin-mobile-session', 'true');
+    document.head.appendChild(script);
+  }
+  if (document.body) loadAdminMobileSessionFix();
+  else document.addEventListener('DOMContentLoaded', loadAdminMobileSessionFix, { once: true });
 })();
