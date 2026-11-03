@@ -298,8 +298,16 @@ function addDaysISO(dateValue,offset){
 function prettyScheduleDate(dateValue){
  return new Date(dateValue+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});
 }
+function rosterEmployees(){
+ const seen=new Set();
+ return state.employees.filter(employee=>{
+   const id=String(employee?.id||"");
+   if(!id||seen.has(id))return false;
+   seen.add(id);return true;
+ });
+}
 function employeeOptions(selected=""){
- return '<option value=""></option>'+state.employees.map(e=>`<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${String(e.name||e.id).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}</option>`).join("");
+ return '<option value=""></option>'+rosterEmployees().map(e=>`<option value="${String(e.id).replace(/"/g,"&quot;")}" ${String(e.id)===String(selected)?"selected":""}>${String(e.name||e.id).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}</option>`).join("");
 }
 function scheduleRosterAssignments(){
  const out={};
@@ -322,7 +330,8 @@ function refreshRosterDayAvailability(day){
    const current=String(sel.value||"");
    [...sel.options].forEach(opt=>{
      const id=String(opt.value||"");
-     opt.disabled=!!id && id!==current && used.has(id);
+     const disabled=!!id && id!==current && used.has(id);
+     if(opt.disabled!==disabled)opt.disabled=disabled;
    });
  });
 }
@@ -682,15 +691,15 @@ function renderScheduleRoster(){
    if(slots && Object.prototype.hasOwnProperty.call(slots,slot))return slots[slot];
    if(scheduleMode==="create") {
      if(!draft) return "";
-     const matches=state.employees.filter(e=>draft[String(e.id)]?.[day]===siteId);
+     const matches=rosterEmployees().filter(e=>draft[String(e.id)]?.[day]===siteId);
      return matches[rowIndex]?.id||"";
    }
    if(draft){
-     const matches=state.employees.filter(e=>draft[String(e.id)]?.[day]===siteId);
+     const matches=rosterEmployees().filter(e=>draft[String(e.id)]?.[day]===siteId);
      return matches[rowIndex]?.id||"";
    }
    if(scheduleBlankDraft)return "";
-   const matches=state.employees.filter(e=>{
+   const matches=rosterEmployees().filter(e=>{
      const hasWeeklySchedules=e?.weeklySchedules&&typeof e.weeklySchedules==="object"&&Object.keys(e.weeklySchedules).length>0;
      const useLegacy=!hasWeeklySchedules;
      const schedule=scheduleForEmployee(e,weekOf,useLegacy);
@@ -724,10 +733,14 @@ function renderScheduleRoster(){
    if(summary)summary.innerHTML=`<strong>Schedule week:</strong><span>${prettyScheduleDate(weekOf)} – ${prettyScheduleDate(addDaysISO(weekOf,6))}</span>`;
    return;
  }
- root.innerHTML=siteOrder.map(siteId=>{
+ const markup=siteOrder.map(siteId=>{
    const site=DTR_SITES[siteId];
    return makeCard(siteId,site?site.name:"Day Off",site?`${site.lat}, ${site.lng}`:"Employees not scheduled / OFF",site?"WEEKLY ROSTER":"OFF",rowLimits[siteId]);
  }).join("");
+ if(root.dataset.rosterContext===context && root.dataset.rosterMarkup===markup && root.querySelector('.site-roster-select'))return;
+ root.dataset.rosterContext=context;
+ root.dataset.rosterMarkup=markup;
+ root.innerHTML=markup;
  root.querySelectorAll('.site-roster-select').forEach(sel=>sel.addEventListener('change',()=>{
    syncRosterDuplicateDay(sel);
    sel.closest('.site-roster-cell')?.classList.toggle('has-name',!!sel.value);
