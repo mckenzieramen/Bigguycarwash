@@ -8,22 +8,35 @@ window.BIGGUYS_FIREBASE_CONFIG = {
   appId: "1:267146668906:web:ad94aec90fa44d7299313"
 };
 
-/* Employee DTR guided Help tutorial. Kept separate so existing DTR logic remains unchanged. */
+/* Employee/customer DTR guided Help tutorial.
+   This tutorial belongs only to the DTR/customer attendance page and must never load in Admin. */
 (function () {
   if (typeof document === 'undefined') return;
-  var script = document.createElement('script');
-  script.src = 'dtr-help.js';
-  script.defer = true;
-  document.head.appendChild(script);
+  function loadDtrHelp() {
+    if (document.body && document.body.classList.contains('admin-body')) return;
+    if (document.querySelector('script[data-bigguys-dtr-help]')) return;
+    var script = document.createElement('script');
+    script.src = 'dtr-help.js?v=20261103-customer-only-v1';
+    script.defer = true;
+    script.setAttribute('data-bigguys-dtr-help', 'true');
+    document.head.appendChild(script);
+  }
+  if (document.body) loadDtrHelp();
+  else document.addEventListener('DOMContentLoaded', loadDtrHelp, { once: true });
 })();
 
 /* Admin Dashboard guided tutorial. Additive loader only; existing admin/Firebase features remain unchanged. */
 (function () {
-  if (typeof document === 'undefined' || !document.body || !document.body.classList.contains('admin-body')) return;
-  if (document.querySelector('script[data-bigguys-admin-tour]')) return;
-  var script = document.createElement('script');
-  script.src = 'admin-guided-tour.js?v=20261102-v1';
-  script.defer = true;
-  script.setAttribute('data-bigguys-admin-tour', 'true');
-  document.head.appendChild(script);
+  if (typeof document === 'undefined') return;
+  function loadAdminTour() {
+    if (!document.body || !document.body.classList.contains('admin-body')) return;
+    if (document.querySelector('script[data-bigguys-admin-tour]')) return;
+    var script = document.createElement('script');
+    script.src = 'admin-guided-tour.js?v=20261103-tabs-v3';
+    script.defer = true;
+    script.setAttribute('data-bigguys-admin-tour', 'true');
+    document.head.appendChild(script);
+  }
+  if (document.body) loadAdminTour();
+  else document.addEventListener('DOMContentLoaded', loadAdminTour, { once: true });
 })();
