@@ -31,6 +31,13 @@ window.BIGGUYS_FIREBASE_CONFIG = {
   function loadAdminTour() {
     if (!document.body || !document.body.classList.contains('admin-body')) return;
     if (document.querySelector('script[data-bigguys-admin-tour]')) return;
+    if (!document.querySelector('script[data-bigguys-schedule-guard]')) {
+      var guard = document.createElement('script');
+      guard.src = 'schedule-draft-guard.js?v=20261103-persist-v1';
+      guard.defer = true;
+      guard.setAttribute('data-bigguys-schedule-guard', 'true');
+      document.head.appendChild(guard);
+    }
     var script = document.createElement('script');
     script.src = 'admin-guided-tour.js?v=20261103-tabs-v3';
     script.defer = true;
