@@ -1,8 +1,10 @@
 const ADMIN_EMAIL="bigguy@admin.com",ADMIN_PASSWORD="bigguyadmin123";
+const ATTENDANCE_START_DATE="2026-11-03";
+const activeAttendance=rows=>(Array.isArray(rows)?rows:[]).filter(row=>row.date>=ATTENDANCE_START_DATE);
 const KEY="bigguys_dtr_v2",MODEL_URLS=["https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights","https://justadudewhohacks.github.io/face-api.js/models"];
 let state=JSON.parse(localStorage.getItem(KEY)||'{"employees":[],"attendance":[],"sales":[],"faces":{},"dailyReports":{}}');
 state.employees=Array.isArray(state.employees)?state.employees:[];
-state.attendance=Array.isArray(state.attendance)?state.attendance:[];
+state.attendance=activeAttendance(state.attendance);
 state.sales=Array.isArray(state.sales)?state.sales:[];
 state.faces=state.faces&&typeof state.faces==="object"?state.faces:{};
 state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==="object"?state.faceUpdatedAt:{};
@@ -56,7 +58,7 @@ function syncStateFromStorage(){
    const raw=JSON.parse(localStorage.getItem(KEY)||"{}");
    if(!raw||typeof raw!=="object")return;
    state.employees=Array.isArray(raw.employees)?raw.employees:[];
-   state.attendance=Array.isArray(raw.attendance)?raw.attendance:[];
+   state.attendance=activeAttendance(raw.attendance);
    state.sales=Array.isArray(raw.sales)?raw.sales:[];
    // Face descriptors are intentionally NOT stored in localStorage. Firebase is
    // the source of truth for faces, so never replace a live Firebase face map
@@ -105,6 +107,7 @@ function isBeforeHire(e,date){return !!(e?.hireDate&&date<e.hireDate);}
 function previousDate(date){const d=new Date(date+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 function previousDayPenaltyApplies(emp,date){
  const prev=previousDate(date);
+ if(prev<ATTENDANCE_START_DATE)return false;
  if(isBeforeHire(emp,prev))return false;
  const a=state.attendance.find(x=>String(x.employeeId)===String(emp.id)&&x.date===prev);
  const status=String(a?.status||"").toLowerCase();
@@ -113,6 +116,7 @@ function previousDayPenaltyApplies(emp,date){
 function effectiveCommissionRate(emp,date,status){return previousDayPenaltyApplies(emp,date)?0.30:commRate(status);}
 async function ensureAutomaticAbsences(){
  const yesterday=previousDate(today()),pending=[];
+ if(yesterday<ATTENDANCE_START_DATE)return;
  for(const e of state.employees){
    if(isBeforeHire(e,yesterday)||isEmployeeOff(e,yesterday))continue;
    const existing=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===yesterday);
@@ -250,13 +254,14 @@ function wrapAllTableScrolls(){
 
 function renderAttendanceAdmin(date){
  const target=date||today();
+ if(target<ATTENDANCE_START_DATE){$("attendanceTable").innerHTML='<p class="muted">Attendance tracking starts November 3, 2026. No attendance or penalties apply before this date.</p>';return;}
  if($("attendanceDate") && $("attendanceDate").value!==target)$("attendanceDate").value=target;
  const rows=state.employees.map((e,i)=>{
    const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===target);
    const off=isEmployeeOff(e,target);
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===target).reduce((t,x)=>t+Number(x.amount||0),0);
    const rate=isWorkedAttendance(a)?effectiveCommissionRate(e,target,a.status):0;
-   let status=a?.status||"awol";
+   let status=a?.status||(target>=today()?"pending":"absent");
    let action="—";
    if(off && !a) status="off";
    else if(!a) action=`<button type="button" class="small-action mark-excuse" data-id="${e.id}" data-date="${target}">MARK EXCUSE</button>`;
@@ -268,7 +273,7 @@ function renderAttendanceAdmin(date){
 }
 async function markEmployeeExcuse(employeeId,date){
  const e=state.employees.find(x=>String(x.id)===String(employeeId));
- if(!e||!date)return;
+ if(!e||!date||date<ATTENDANCE_START_DATE)return;
  if(isEmployeeOff(e,date)){alert(`${e.name} is scheduled OFF on ${date}.`);return;}
  const existing=state.attendance.find(x=>String(x.employeeId)===String(employeeId)&&x.date===date);
  if(existing?.clockIn){alert("This employee already has a Time In record for this date.");return;}
@@ -811,7 +816,7 @@ function refresh(){
  if($("carsWashed"))$("carsWashed").textContent=ds.filter(x=>String(x.category||"").toLowerCase()==="carwash"||(!x.category&&/carwash|wash/i.test(x.note||""))).length;
  if($("employeeTotal"))$("employeeTotal").textContent=state.employees.length;
  if($("payrollTotal"))$("payrollTotal").textContent=money(state.employees.reduce((t,e)=>t+pay(e,d),0));
- const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"awol"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
+ const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"pending"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
  $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
