@@ -22,6 +22,8 @@ let scheduleDraftActive=false;
 let scheduleDraftWeek="";
 let scheduleSelectedDate="";
 let scheduleUiStateLoaded=false;
+let rosterEditContext="";
+let rosterEditSlots=null;
 let attendanceCaptureDisplayedKey=null;
 let selectedDtrEmployeeId="";
 let attendanceCaptureHideTimer=null;
@@ -360,6 +362,8 @@ function loadScheduleUiState(){
     return {
       mode:raw.mode==="scheduled"?"scheduled":"create",
       week:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.week||""))?mondayOfWeek(raw.week):"",
+      draftActive:raw.draftActive===true,
+      draftWeek:raw.draftWeek||"",
       selectedDate:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.selectedDate||""))?String(raw.selectedDate):"",
       editingWeek:/^\d{4}-\d{2}-\d{2}$/.test(String(raw.editingWeek||""))?mondayOfWeek(raw.editingWeek):""
     };
@@ -414,16 +418,19 @@ function scheduleDraftForWeek(weekOf){
 function captureCurrentScheduleDraft(weekOf){
  const key=mondayOfWeek(weekOf||today());
  const draft={};
+ const slots={};
  document.querySelectorAll('#scheduleRoster select[data-roster-site][data-roster-day]').forEach(sel=>{
    const id=String(sel.value||"");
    const day=sel.dataset.rosterDay;
    const site=sel.dataset.rosterSite;
    if(!day||!site)return;
-   if(!draft[id])draft[id]={};
-   if(id)draft[id][day]=site;
+   slots[`${site}|${day}|${sel.dataset.rosterRow}`]=id;
+   if(id){if(!draft[id])draft[id]={};draft[id][day]=site;}
  });
  state.scheduleDrafts=state.scheduleDrafts||{};
+ draft.__slots=slots;
  state.scheduleDrafts[key]=draft;
+ if(scheduleMode==="create"){scheduleDraftActive=true;scheduleDraftWeek=key;persistScheduleUiState();}
  state.scheduleWeekOf=key;
  persistScheduleDrafts();
  cacheState();
@@ -435,7 +442,7 @@ function draftAssignmentsForWeek(weekOf){
  if(!draft)return null;
  const out={};
  Object.entries(draft).forEach(([id,days])=>{
-   if(!id||!days||typeof days!=="object")return;
+   if(!id||id==="__slots"||!days||typeof days!=="object")return;
    out[id]={...days};
  });
  return out;
@@ -646,6 +653,7 @@ async function saveRosterSchedule(){
    }
    state.scheduleWeekOf=weekOf;
    clearScheduleDraft(weekOf);
+   rosterEditContext="";rosterEditSlots=null;
    scheduleEditingWeek="";
    scheduleBlankDraft=false;
    scheduleMode='scheduled';
@@ -667,7 +675,11 @@ function renderScheduleRoster(){
  const draft=(scheduleMode==="create" && scheduleDraftActive && scheduleDraftWeek===weekOf)?draftAssignmentsForWeek(weekOf):null;
  const viewingSavedWeek=scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf&&hasSavedScheduleForWeek(weekOf);
  const showRoster=scheduleMode!=="scheduled"||viewingSavedWeek;
+ const context=`${scheduleMode}|${weekOf}|${scheduleEditingWeek}`;
+ const slots=rosterEditContext===context?rosterEditSlots:(scheduleMode==="create"?scheduleDraftForWeek(weekOf)?.__slots:null);
  const employeeAt=(siteId,day,rowIndex)=>{
+   const slot=`${siteId}|${day}|${rowIndex}`;
+   if(slots && Object.prototype.hasOwnProperty.call(slots,slot))return slots[slot];
    if(scheduleMode==="create") {
      if(!draft) return "";
      const matches=state.employees.filter(e=>draft[String(e.id)]?.[day]===siteId);
@@ -690,7 +702,7 @@ function renderScheduleRoster(){
    return Array.from({length:maxRows},(_,rowIndex)=>{
      const cells=days.map(day=>{
        const selected=employeeAt(siteId,day,rowIndex);
-       return `<div class="site-roster-cell ${selected?"has-name":"empty"}"><select class="site-roster-select" data-roster-site="${siteId}" data-roster-day="${day}" aria-label="${escapeHtml(siteId)} ${escapeHtml(day)} employee">${employeeOptions(selected)}</select></div>`;
+       return `<div class="site-roster-cell ${selected?"has-name":"empty"}"><select class="site-roster-select" data-roster-site="${siteId}" data-roster-day="${day}" data-roster-row="${rowIndex}" aria-label="${escapeHtml(siteId)} ${escapeHtml(day)} employee">${employeeOptions(selected)}</select></div>`;
      }).join("");
      return `<div class="site-roster-row"><div class="site-roster-num">${rowIndex+1}</div>${cells}</div>`;
    }).join("");
@@ -716,7 +728,14 @@ function renderScheduleRoster(){
    const site=DTR_SITES[siteId];
    return makeCard(siteId,site?site.name:"Day Off",site?`${site.lat}, ${site.lng}`:"Employees not scheduled / OFF",site?"WEEKLY ROSTER":"OFF",rowLimits[siteId]);
  }).join("");
- root.querySelectorAll('.site-roster-select').forEach(sel=>sel.addEventListener('change',()=>{syncRosterDuplicateDay(sel);captureCurrentScheduleDraft(weekOf);}));
+ root.querySelectorAll('.site-roster-select').forEach(sel=>sel.addEventListener('change',()=>{
+   syncRosterDuplicateDay(sel);
+   sel.closest('.site-roster-cell')?.classList.toggle('has-name',!!sel.value);
+   sel.closest('.site-roster-cell')?.classList.toggle('empty',!sel.value);
+   rosterEditContext=context;rosterEditSlots={};
+   root.querySelectorAll('.site-roster-select').forEach(input=>{rosterEditSlots[`${input.dataset.rosterSite}|${input.dataset.rosterDay}|${input.dataset.rosterRow}`]=input.value;});
+   if(scheduleMode==="create")captureCurrentScheduleDraft(weekOf);
+ }));
  normalizeRosterDuplicates();
  const summary=$("scheduleWeekSummary");
  if(summary)summary.innerHTML=`<strong>Schedule week:</strong><span>${prettyScheduleDate(weekOf)} – ${prettyScheduleDate(addDaysISO(weekOf,6))}</span>`;
@@ -770,6 +789,8 @@ function renderSettings(){
  $("offDaysSummary").innerHTML=e?`<strong>${e.name}</strong><span>${selected.size?Array.from(selected).join(" • "):"No regular days off selected."}</span>`:"Select an employee to configure days off.";
 }
 function refresh(){
+ // Keep native dropdowns mounted while the user is choosing an option.
+ if(document.activeElement?.tagName==="SELECT")return;
  const __scrollPositions=preserveTableScrollPositions();
  syncStateFromStorage();
  const d=today(),ds=state.sales.filter(x=>x.date===d),totalSales=ds.reduce((t,x)=>t+Number(x.amount||0),0);
@@ -786,7 +807,12 @@ document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnr
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
  refreshDtrSelector();
  renderSettings();
- const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join(""); if($("saleEmployee"))$("saleEmployee").innerHTML=opts;if($("enrollEmployee"))$("enrollEmployee").innerHTML=opts;
+ const opts=state.employees.map(e=>`<option value="${e.id}">${e.name} (${e.id})</option>`).join("");
+ ["saleEmployee","enrollEmployee"].forEach(id=>{
+   const select=$(id);if(!select||select.dataset.employeeOptions===opts)return;
+   const selected=select.value;select.innerHTML=opts;select.dataset.employeeOptions=opts;
+   if([...select.options].some(option=>option.value===selected))select.value=selected;
+ });
  $("salesTable").innerHTML=table(state.sales.slice().reverse().map(s=>[s.date,state.employees.find(e=>e.id===s.employeeId)?.name||s.employeeId,money(s.amount),s.note||"—"]),["Date","Employee","Amount","Service / Note"]);
  wrapAllTableScrolls();
  bindHorizontalScrollPersistence();
@@ -1472,3 +1498,4 @@ $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggl
 document.addEventListener("click",ev=>{const side=$("adminSidebar"),btn=$("mobileMenu");if(window.innerWidth<=950&&side?.classList.contains("open")&&!side.contains(ev.target)&&!btn?.contains(ev.target))side.classList.remove("open");});
 
 setInterval(()=>{const el=$("cloudStatus");if(!el)return;const c=window.BIGGUYS_CLOUD||{};if(c.ready&&c.lastSyncError)el.textContent="Cloud sync: ERROR — "+(c.lastSyncError.message||"write/read failed");else if(c.ready)el.textContent="Cloud sync: CONNECTED to Firebase";else if(c.status==="error")el.textContent="Cloud sync: ERROR — "+(c.error?.message||c.lastSyncError?.message||"Firebase connection failed");else if(c.status==="authenticated")el.textContent="Cloud sync: authenticated — starting Firestore…";else el.textContent=window.BigGuysCloud?.configured?"Cloud sync: waiting for Admin login":"Cloud sync: local mode";},1000);
+
