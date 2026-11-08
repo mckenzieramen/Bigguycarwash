@@ -65,5 +65,19 @@
 @media(prefers-reduced-motion:reduce){#scheduleSavedNotice{transition:none}}
 </style>
 <div id="scheduleSavedNotice" hidden role="status" aria-live="polite" aria-atomic="true"><div class="notice-icon" aria-hidden="true">✓</div><div class="notice-copy"><strong>Schedule Saved</strong><span id="scheduleSavedNoticeDate">Weekly schedule</span><small>Changes successfully saved</small></div><button type="button" id="scheduleSavedNoticeClose" aria-label="Dismiss notification">×</button></div>
+<style id="scheduleConfirmPremiumStyle">
+#scheduleSaveConfirm[hidden]{display:none!important}
+#scheduleSaveConfirm{position:fixed;inset:0;z-index:100010;display:grid;place-items:center;padding:18px;background:rgba(0,9,19,.75);backdrop-filter:blur(6px)}
+#scheduleSaveConfirm .confirm-card{box-sizing:border-box;width:min(440px,100%);padding:27px;border:1px solid #29475a;border-radius:22px;background:linear-gradient(145deg,#142d3d,#091723);box-shadow:0 24px 75px #0009;color:#edf7ff;text-align:left}
+#scheduleSaveConfirm .confirm-icon{display:grid;place-items:center;width:50px;height:50px;border-radius:16px;background:#173c50;color:#8dd9ff;font-size:25px;margin-bottom:16px}
+#scheduleSaveConfirm h2{margin:0 0 9px;font-size:21px;font-weight:800;color:#fff}
+#scheduleSaveConfirm p{margin:0 0 23px;color:#b5ccda;font-size:13px;line-height:1.65}
+#scheduleSaveConfirm .confirm-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+#scheduleSaveConfirm .confirm-actions button{border-radius:11px;padding:12px 17px;font-size:12px;font-weight:800;cursor:pointer;border:1px solid #3d6178}
+#scheduleSaveConfirmNo{background:#142737;color:#d4e5ee}
+#scheduleSaveConfirmYes{background:linear-gradient(135deg,#219bdb,#1269b8);border-color:#42aee8!important;color:#fff}
+#scheduleSaveConfirm button:focus-visible{outline:3px solid #92d7ff;outline-offset:3px}
+</style>
+<div id="scheduleSaveConfirm" hidden role="dialog" aria-modal="true" aria-labelledby="scheduleSaveConfirmTitle" aria-describedby="scheduleSaveConfirmDetail"><div class="confirm-card"><div class="confirm-icon" aria-hidden="true">?</div><h2 id="scheduleSaveConfirmTitle">Save this schedule?</h2><p id="scheduleSaveConfirmDetail">Are you sure you want to save this schedule?</p><div class="confirm-actions"><button type="button" id="scheduleSaveConfirmNo">Cancel</button><button type="button" id="scheduleSaveConfirmYes">Yes, Save Schedule</button></div></div></div>
 <script src="admin.js"></script>
 </body></html>
