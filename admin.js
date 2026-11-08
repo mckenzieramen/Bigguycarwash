@@ -617,6 +617,28 @@ function renderSchedules(){
  persistScheduleUiState();
 }
 
+// Premium non-blocking success notice; does not change the schedule save workflow.
+let scheduleNoticeTimer=null;
+function showScheduleSavedNotice(weekOf){
+ const notice=document.getElementById("scheduleSavedNotice");
+ if(!notice)return;
+ const date=document.getElementById("scheduleSavedNoticeDate");
+ if(date)date.textContent="Week of "+prettyScheduleDate(weekOf);
+ clearTimeout(scheduleNoticeTimer);
+ notice.classList.remove("visible");
+ notice.hidden=false;
+ requestAnimationFrame(()=>notice.classList.add("visible"));
+ scheduleNoticeTimer=setTimeout(()=>dismissScheduleSavedNotice(),4200);
+}
+function dismissScheduleSavedNotice(){
+ const notice=document.getElementById("scheduleSavedNotice");
+ if(!notice)return;
+ notice.classList.remove("visible");
+ clearTimeout(scheduleNoticeTimer);
+ scheduleNoticeTimer=setTimeout(()=>{notice.hidden=true;},260);
+}
+document.getElementById("scheduleSavedNoticeClose")?.addEventListener("click",dismissScheduleSavedNotice);
+
 async function saveRosterSchedule(){
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||today());
  const assignments=scheduleRosterAssignments();
@@ -675,7 +697,7 @@ async function saveRosterSchedule(){
    persistScheduleUiState();
    cacheState();
    renderSchedules();renderAttendanceAdmin(attendanceDateValue());renderPayroll();refresh();
-   alert(`Schedule saved for the week of ${prettyScheduleDate(weekOf)}.`);
+   showScheduleSavedNotice(weekOf);
  }catch(err){console.error("Roster schedule save failed",err);alert(`Unable to save schedule: ${err?.code||err?.message||err}`);}
 }
 function renderScheduleRoster(){
