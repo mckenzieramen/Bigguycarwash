@@ -717,7 +717,25 @@ async function saveRosterSchedule(){
    cacheState();
    renderSchedules();renderAttendanceAdmin(attendanceDateValue());renderPayroll();refresh();
    showScheduleSavedNotice(weekOf);
- }catch(err){console.error("Roster schedule save failed",err);alert(`Unable to save schedule: ${err?.code||err?.message||err}`);}
+ }catch(err){
+  console.error("Roster schedule save failed",err);
+  const message=String(err?.message||err?.code||err);
+  if(/Admin authentication required|auth\/user-token-expired|auth\/invalid-user-token/i.test(message)){
+    // Preserve the visible roster selections while the admin signs in again.
+    const week=mondayOfWeek($("scheduleWeekOf")?.value||today());
+    rosterEditContext=`${scheduleMode}|${week}|${scheduleEditingWeek}`;
+    rosterEditSlots={};
+    document.querySelectorAll('#scheduleRoster [data-roster-site][data-roster-day]').forEach(input=>{
+      rosterEditSlots[`${input.dataset.rosterSite}|${input.dataset.rosterDay}|${input.dataset.rosterRow}`]=input.value;
+    });
+    $("dashboard").classList.add("hidden");
+    $("adminLogin").classList.remove("hidden");
+    document.body.classList.remove("logged-in");
+    $("loginError").textContent="Your admin session needs to be verified. Please sign in again; your unsaved schedule selections are retained on this page.";
+    return;
+  }
+  alert(`Unable to save schedule: ${message}`);
+ }
 }
 function renderScheduleRoster(){
  const root=$("scheduleRoster");if(!root)return;
