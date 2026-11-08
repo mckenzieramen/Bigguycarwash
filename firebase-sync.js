@@ -273,21 +273,35 @@
     readyPromise=(async()=>{try{await initFirebase();await ensureAuth(mode);let next=await migrateLegacyIfNeeded(initial);window.__BIGGUYS_CURRENT_STATE=next;if(onRemote)onRemote(next);startListeners(onRemote);startCentralRefresh(onRemote);status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return true;}catch(e){status({ready:false,status:'error',error:e,lastSyncError:e});console.error('Firebase initialization failed:',e);return false;}})();return readyPromise;
   }
   async function getAdminProfile(user){await initFirebase();const u=user||auth?.currentUser;if(!u||u.isAnonymous)throw new Error('Admin authentication required.');const s=await db.doc(`admins/${u.uid}`).get();if(!s.exists)throw new Error('Admin profile not found in Firestore.');const p=s.data()||{};if(p.role!=='admin'||p.active!==true)throw new Error('This Firebase account is not an active administrator.');return {uid:u.uid,...p};}
+  async function waitForAuthRestoration(){
+    await initFirebase();
+    if(typeof auth.authStateReady==='function'){
+      await auth.authStateReady();
+      return auth.currentUser;
+    }
+    return new Promise((resolve,reject)=>{
+      let unsubscribe=()=>{};
+      unsubscribe=auth.onAuthStateChanged(user=>{
+        resolve(user);
+        queueMicrotask(()=>unsubscribe());
+      },error=>{reject(error);queueMicrotask(()=>unsubscribe());});
+    });
+  }
   async function restoreAdminSession(){
- await initFirebase();
- await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
- // Firebase restores persisted credentials asynchronously after page load.
- const user=await new Promise(resolve=>{
-  const unsubscribe=auth.onAuthStateChanged(u=>{unsubscribe();resolve(u);},err=>{unsubscribe();console.warn("Auth restoration error:",err);resolve(null);});
- });
- if(!user||user.isAnonymous)return null;
- try{await getAdminProfile(user);return user;}catch(err){
-  console.warn("Stored admin session rejected:",err);
-  await auth.signOut();
-  return null;
- }
-}
-async function adminLogin(email,password){await initFirebase();await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);const user=(await auth.signInWithEmailAndPassword(email,password)).user;if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');await getAdminProfile(user);readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];return user;}
+    const user=await waitForAuthRestoration();
+    if(!user||user.isAnonymous)return null;
+    try{await getAdminProfile(user);return user;}
+    catch(err){
+      const code=String(err?.code||'');
+      if(code==='permission-denied'||code==='auth/user-disabled'||/not an active administrator|Admin profile not found/.test(String(err?.message||''))){
+        console.warn('Stored admin account is not authorized:',err);
+        return null;
+      }
+      console.warn('Admin profile verification temporarily unavailable:',err);
+      throw err;
+    }
+  }
+  async function adminLogin(email,password){await initFirebase();await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);const user=(await auth.signInWithEmailAndPassword(email,password)).user;if(user.isAnonymous)throw new Error('Anonymous accounts cannot access the Admin Dashboard.');await getAdminProfile(user);readyPromise=null;unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];return user;}
   async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;}
   async function getAdminProfilePublic(){return getAdminProfile();}
   async function refreshCloud(){await initFirebase();await ensureAuth(isAdmin()?'admin':'dtr');const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return next;}
