@@ -913,6 +913,35 @@ if($("empHireDate")){
  updateEmployeeIdPreview();
 }
 
+// Restore the existing Firebase session on reload without showing the login form.
+function showAdminDashboard(){
+ $("adminLogin").classList.add("hidden");
+ $("dashboard").classList.remove("hidden");
+ document.body.classList.add("logged-in");
+ $("loginError").textContent="";
+ refresh();startClock();
+}
+function startAdminCloudSync(){
+ BigGuysCloud.init(state,remote=>{
+  state=remote;cacheState();scheduleModeInitialized=false;refresh();cleanupExpiredScheduleWeeks();
+ },'admin').catch(err=>console.error("Background Firestore sync failed:",err));
+}
+async function restoreAdminSession(){
+ const loading=$("adminSessionLoading");
+ try{
+  const user=await BigGuysCloud.restoreAdminSession();
+  if(user){
+   showAdminDashboard();
+   startAdminCloudSync();
+  }else{
+   $("adminLogin").classList.remove("hidden");
+  }
+ }catch(err){
+  console.warn("Admin session restoration failed:",err);
+  $("adminLogin").classList.remove("hidden");
+ }finally{if(loading)loading.classList.add("hidden");}
+}
+restoreAdminSession();
 $("loginBtn").onclick=async()=>{
   const email=$("adminEmail").value.trim(),password=$("adminPassword").value;
   $("loginBtn").disabled=true;$("loginError").textContent="Signing in…";
@@ -920,187 +949,8 @@ $("loginBtn").onclick=async()=>{
     if(!window.BigGuysCloud?.configured)throw new Error("Firebase is not configured.");
     if(email!==ADMIN_EMAIL)throw new Error("This account is not authorized as the Big Guy's administrator.");
     await BigGuysCloud.adminLogin(email,password);
-    // Show the dashboard immediately after Firebase Authentication succeeds.
-    // Firestore sync continues in the background so login is not blocked by
-    // network reads/writes.
-    $("adminLogin").classList.add("hidden");$("dashboard").classList.remove("hidden");document.body.classList.add("logged-in");
-    $("loginError").textContent="";refresh();startClock();
-    BigGuysCloud.init(state,remote=>{
-      state=remote;
-      cacheState();
-      scheduleModeInitialized=false;
-      refresh();
-      cleanupExpiredScheduleWeeks();
-    },'admin').catch(err=>{
-      console.error('Background Firestore sync failed:',err);
-    });
-  }catch(err){
-    console.error(err);
-    $("loginError").textContent=err?.message||"Invalid admin email or password.";
-  }finally{$("loginBtn").disabled=false;}
-};
-$("logoutBtn").onclick=async()=>{
-  try{sessionStorage.removeItem(FACE_SCAN_SESSION_KEY);}catch(e){}
-  try{await BigGuysCloud.adminLogout();}catch(e){console.warn(e)}
-  $("dashboard").classList.add("hidden");$("adminLogin").classList.remove("hidden");$("adminPassword").value="";document.body.classList.remove("logged-in");
-};
-$("employeeForm").onsubmit=async e=>{
- e.preventDefault();
- const btn=e.target.querySelector('button[type="submit"]');
- const first=$("empFirstName").value.trim(),last=$("empLastName").value.trim();
- if(!first||!last)return;
- if(btn){btn.disabled=true;btn.textContent='SAVING EMPLOYEE…';}
- try{
-   await window.BigGuysCloud?.init?.(state,remote=>{
-     state=remote;
-     cacheState();
-   },'admin');
-   const hireDate=$("empHireDate").value||today();
-   const id=window.BigGuysCloud?.reserveEmployeeId ? await window.BigGuysCloud.reserveEmployeeId(hireDate) : nextEmployeeId(hireDate);
-   const employee={id,firstName:first,lastName:last,name:`${first} ${last}`.trim(),type:$("empType").value,start:$("empStart").value,hireDate,siteId:"",weeklySchedules:{},weeklySchedule:{Monday:"",Tuesday:"",Wednesday:"",Thursday:"",Friday:"",Saturday:"",Sunday:""},offDays:[]};
-   state.employees.push(employee);
-   cacheState();
-   if(window.BigGuysCloud?.saveEmployee){
-     state=await window.BigGuysCloud.saveEmployee(employee);
-     cacheState();
-   }else{
-     await syncAdminNow();
-   }
-   e.target.reset();
-   $("empStart").value='08:00';
-   $("empHireDate").value=today();
-   updateEmployeeIdPreview();
-   refresh();
-   openEnrollmentModal(id);
- }catch(err){
-   console.error('Employee creation failed:',err);
-   alert('Employee was not fully saved. Please check the Firebase connection and try again.');
- }finally{
-   if(btn){btn.disabled=false;btn.textContent='ADD EMPLOYEE & ENROLL FACE';}
- }
-};
-$("salesForm").onsubmit=async e=>{e.preventDefault();const now=new Date();const sale={id:(crypto.randomUUID?crypto.randomUUID():`sale_${Date.now()}_${Math.random().toString(36).slice(2)}`),date:today(),time:now.toTimeString().slice(0,8),createdAtISO:now.toISOString(),employeeId:$("saleEmployee").value,amount:Number($("saleAmount").value||0),remittance:Number($("saleRemittance").value||0),expense:Number($("saleExpense").value||0),category:$("saleCategory").value,note:"",paymentMethod:"Cash"};if(sale.amount<0||sale.remittance<0||sale.expense<0){alert('Please enter valid amounts.');return;}state.sales.push(sale);try{if(window.BigGuysCloud?.saveSale){state=await window.BigGuysCloud.saveSale(sale);}else{state=await save();}cacheState();try{const f=dailyFinancials(sale.date);await saveReportRecord(sale.date,{cash:f.cash,expenses:f.expenses,cashRemitted:f.cashRemitted,expectedRemittance:f.expected,short:f.short,over:f.over,lastSaleAtISO:sale.createdAtISO});}catch(reportErr){console.warn("Automatic report snapshot failed:",reportErr);}e.target.reset();$("salesViewDate").value=sale.date;refresh()}catch(err){console.error(err);alert(`Sale cloud save failed: ${err?.code||err?.message||err}`)}};
-document.querySelectorAll(".tabs button").forEach(btn=>btn.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");document.querySelectorAll(".tab-panel").forEach(x=>x.classList.add("hidden"));$(btn.dataset.tab).classList.remove("hidden")});
-let enrollmentRunning=false,enrollmentSamples=[];
-const ENROLL_STEPS=[
-  {name:"Normal face",instruction:"Look straight at the camera with your face centered."},
-  {name:"Slight left",instruction:"Turn your face slightly to the LEFT."},
-  {name:"Slight right",instruction:"Turn your face slightly to the RIGHT."},
-  {name:"Slight up/down",instruction:"Tilt your face slightly UP, then slightly DOWN."},
-  {name:"Normal expression",instruction:"Return to center with a natural, relaxed expression."}
-];
-let enrollmentStep=0;
-function normalizeFaceRecords(value){
- if(!value)return [];
- if(Array.isArray(value)&&value.length&&Array.isArray(value[0]))return value;
- if(Array.isArray(value))return [value];
- return [];
-}
-function averageDescriptor(samples){
- const len=samples[0].length,avg=new Array(len).fill(0);
- for(const sample of samples)for(let i=0;i<len;i++)avg[i]+=sample[i];
- for(let i=0;i<len;i++)avg[i]/=samples.length;
- return avg;
-}
-function enrollmentFaceIsInsideOval(d){
- const video=$("enrollCamera"),w=video.videoWidth||720,h=video.videoHeight||720,box=d.detection.box;
- const cx=(box.x+box.width/2)/w,cy=(box.y+box.height/2)/h;
- const rx=.23,ry=.40;
- const ellipse=((cx-.5)**2)/(rx**2)+((cy-.50)**2)/(ry**2);
- const faceHeight=box.height/h,faceWidth=box.width/w;
- return ellipse<=1&&faceHeight>=.22&&faceHeight<=.82&&faceWidth>=.14&&faceWidth<=.72;
-}
-function facePoseForStep(d,step){
- const pos=d?.landmarks?.positions||[];
- if(pos.length<68)return true;
- const nose=pos[30], leftEye=pos[36], rightEye=pos[45], chin=pos[8], brow=pos[27];
- const eyeMidX=(leftEye.x+rightEye.x)/2, eyeDist=Math.max(1,Math.abs(rightEye.x-leftEye.x));
- const yaw=(nose.x-eyeMidX)/eyeDist;
- const faceVertical=Math.max(1,chin.y-brow.y);
- const pitch=(nose.y-(brow.y+faceVertical*.45))/faceVertical;
- if(step===0||step===4)return Math.abs(yaw)<.16;
- if(step===1)return yaw<-.08;
- if(step===2)return yaw>.08;
- if(step===3)return Math.abs(yaw)<.22 && pitch<.20;
- return true;
-}
-async function captureEnrollmentSample(id,step){
- const d=await faceapi.detectSingleFace($("enrollCamera"),new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45})).withFaceLandmarks(true).withFaceDescriptor();
- if(!d)return false;
- const good=enrollmentFaceIsInsideOval(d) && facePoseForStep(d,step);
- const frame=$("enrollOvalFrame");
- frame?.classList.toggle("oval-green",good); frame?.classList.toggle("oval-red",!good);
- if(!good)return false;
- const descriptor=Array.from(d.descriptor);
- if(descriptor.length!==128||descriptor.some(v=>!Number.isFinite(Number(v))))return false;
- enrollmentSamples.push(descriptor);
- const next=enrollmentSamples.length;
- $("enrollResult").innerHTML=`<div class="result success enrollment-progress"><strong>${ENROLL_STEPS[step].name}</strong><br>Sample ${next}/5 captured ✓<br><small>${next<5?ENROLL_STEPS[next].instruction:"All 5 face samples captured. Saving to Firebase…"}</small></div>`;
- return true;
-}
-function stopEnrollmentCamera(){
- if(enrollStream){enrollStream.getTracks().forEach(t=>t.stop());enrollStream=null;}
- const v=$("enrollCamera");if(v)v.srcObject=null;
-}
-function setEnrollmentRetryVisible(show){const b=$("retryEnrollment");if(b)b.classList.toggle("hidden",!show);}
-function closeEnrollmentModal(){
- stopEnrollmentCamera();
- enrollmentRunning=false;
- setEnrollmentRetryVisible(false);
- $("enrollmentModal")?.classList.add('hidden');
-}
-async function runAutoEnrollment(){
- const id=$("enrollEmployee").value;if(!id||enrollmentRunning)return false;
- setEnrollmentRetryVisible(false);
- enrollmentRunning=true;enrollmentSamples=[];enrollmentStep=0;
- $("enrollStatus").textContent=`Step 1/5 — ${ENROLL_STEPS[0].instruction}`;
- $("enrollResult").innerHTML=`<div class="result success enrollment-progress"><strong>${ENROLL_STEPS[0].name}</strong><br><small>${ENROLL_STEPS[0].instruction}</small></div>`;
- for(enrollmentStep=0;enrollmentStep<ENROLL_STEPS.length&&enrollmentRunning;enrollmentStep++){
-   let captured=false, attempts=0;
-   $("enrollStatus").textContent=`Step ${enrollmentStep+1}/5 — ${ENROLL_STEPS[enrollmentStep].instruction}`;
-   while(!captured&&attempts<80&&enrollmentRunning){
-     attempts++;
-     try{captured=await captureEnrollmentSample(id,enrollmentStep);}catch(err){console.warn('Enrollment detection error:',err);}
-     if(!captured)$("enrollStatus").textContent=`🔴 Step ${enrollmentStep+1}/5 — ${ENROLL_STEPS[enrollmentStep].instruction}`;
-     else if(enrollmentStep<4)$("enrollStatus").textContent=`🟢 Step ${enrollmentStep+1}/5 captured — now: ${ENROLL_STEPS[enrollmentStep+1].instruction}`;
-     await new Promise(r=>setTimeout(r,350));
-   }
-   if(!captured){
-     $("enrollStatus").textContent="Enrollment paused — please reposition and try again.";
-     $("enrollResult").innerHTML='<div class="result late-result">Could not capture this required face position. Keep your face inside the oval and follow the instruction.</div>';
-     enrollmentRunning=false;
-    setEnrollmentRetryVisible(true);
-    return false;
-   }
-   await new Promise(r=>setTimeout(r,500));
- }
- if(enrollmentSamples.length===5){
-   state.faces[id]=enrollmentSamples;
-   state.faceUpdatedAt=state.faceUpdatedAt||{};state.faceUpdatedAt[id]=new Date().toISOString();cacheState();
-   try{
-     let lastErr=null,confirmed=false;
-     for(let attempt=1;attempt<=5&&!confirmed;attempt++){
-       try{
-         if(window.BigGuysCloud?.saveFaceEnrollment)state=await window.BigGuysCloud.saveFaceEnrollment(id,enrollmentSamples);else await syncAdminNow();
-         // Keep the just-confirmed samples visible locally even if a realtime listener
-         // delivers an older collection snapshot during the same save cycle.
-         state.faces=state.faces&&typeof state.faces==='object'?state.faces:{};
-         state.faces[id]=enrollmentSamples.map(sample=>Array.from(sample));
-         state.faceUpdatedAt=state.faceUpdatedAt&&typeof state.faceUpdatedAt==='object'?state.faceUpdatedAt:{};
-         state.faceUpdatedAt[id]=new Date().toISOString();
-         cacheState();
-         const enrolledEmployee=state.employees.find(e=>String(e.id)===String(id));
-         confirmed=Array.isArray(state.faces?.[id])&&state.faces[id].length>=5&&enrolledEmployee?.faceEnrolled===true;
-         if(!confirmed)throw new Error('Firebase returned without confirming the enrolled face.');
-       }catch(err){lastErr=err;if(attempt<5)await new Promise(r=>setTimeout(r,500*attempt));}
-     }
-     if(!confirmed)throw lastErr||new Error('Firebase did not confirm the face enrollment.');
-     const employee=state.employees.find(e=>e.id===id);
-     $("enrollStatus").textContent="✓ Employee enrolled successfully.";
-     $("enrollResult").innerHTML=`<div class="enrolled-success"><div class="enrolled-check">✓</div><strong>EMPLOYEE ENROLLED</strong><span>${employee?.name||''}</span><small>${id} • 5 face samples saved to Firebase</small></div>`;
-     refresh();
-     setTimeout(()=>{closeEnrollmentModal();const nav=document.querySelector('.side-nav[data-tab="employees"]');if(nav)nav.click();const form=$("employeeForm");if(form){form.reset();$("empStart").value='08:00';$("empHireDate").value=today();updateEmployeeIdPreview();}$("empFirstName")?.focus();},1400);
-     enrollmentRunning=false;return true;
+    showAdminDashboard();
+    startAdminCloudSync();
    }catch(err){
      console.error('Face enrollment cloud save failed:',err);const detail=[err?.code,err?.message].filter(Boolean).join(' — ')||'Unknown Firebase error';
      $("enrollStatus").textContent="Cloud save could not be confirmed.";
