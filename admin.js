@@ -396,7 +396,7 @@ function restoreScheduleUiState(){
   const saved=loadScheduleUiState();
   if(saved){
     scheduleMode=saved.mode;
-    scheduleEditingWeek=saved.editingWeek||"";
+    scheduleEditingWeek=""; // Reopen only on explicit EDIT
     scheduleDraftActive=saved.draftActive===true;
     scheduleDraftWeek=saved.draftWeek||"";
     scheduleSelectedDate=saved.selectedDate||saved.week||"";
@@ -669,8 +669,8 @@ async function saveRosterSchedule(){
    clearScheduleDraft(weekOf);
    // Preserve the edited week in the roster after a successful update.
     rosterEditContext="";rosterEditSlots=null;
-    scheduleEditingWeek=weekOf;
-    scheduleBlankDraft=false;
+    scheduleEditingWeek="";
+    scheduleBlankDraft=true;
     scheduleMode='scheduled';
    persistScheduleUiState();
    cacheState();
@@ -1411,8 +1411,8 @@ $("scheduleWeekOf")?.addEventListener("change",()=>{
  const weekOf=mondayOfWeek(selected);
  state.scheduleWeekOf=weekOf;
  if(scheduleMode==="scheduled"){
-   scheduleEditingWeek=hasSavedScheduleForWeek(weekOf)?weekOf:"";
-   scheduleBlankDraft=!scheduleEditingWeek;
+   scheduleEditingWeek=""; // Date changes do not open saved weeks
+    scheduleBlankDraft=true;
  }else{
    scheduleEditingWeek="";
    scheduleBlankDraft=!scheduleDraftForWeek(weekOf);
