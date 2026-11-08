@@ -89,7 +89,7 @@ function scheduleForEmployee(e,dateOrWeek=today(),useLegacy=true){
  const useSavedWeek=hasSavedWeek;
  const existing=useSavedWeek?weekly[weekKey]:(useLegacy&&!Object.keys(weekly).length?legacy:{});
  const out={};
- WEEKDAYS.slice(1).forEach(day=>{
+ WEEKDAYS.forEach(day=>{
    const value=existing?.[day];
    out[day]=SCHEDULE_SITE_OPTIONS.includes(value)?value:"";
  });
@@ -341,7 +341,7 @@ function refreshRosterDayAvailability(day){
  });
 }
 function normalizeRosterDuplicates(){
- const days=WEEKDAYS.slice(1);
+ const days=WEEKDAYS;
  days.forEach(day=>{
    const seen=new Set();
    document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`).forEach(sel=>{
