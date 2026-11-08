@@ -667,10 +667,11 @@ async function saveRosterSchedule(){
    }
    state.scheduleWeekOf=weekOf;
    clearScheduleDraft(weekOf);
-   rosterEditContext="";rosterEditSlots=null;
-   scheduleEditingWeek="";
-   scheduleBlankDraft=false;
-   scheduleMode='scheduled';
+   // Preserve the edited week in the roster after a successful update.
+    rosterEditContext="";rosterEditSlots=null;
+    scheduleEditingWeek=weekOf;
+    scheduleBlankDraft=false;
+    scheduleMode='scheduled';
    persistScheduleUiState();
    cacheState();
    renderSchedules();renderAttendanceAdmin(attendanceDateValue());renderPayroll();refresh();
