@@ -1582,7 +1582,9 @@ $("reportPrintBtn")?.addEventListener('click',()=>window.print());$("salesPrintB
 window.addEventListener("storage",()=>{syncStateFromStorage();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh()});
 window.addEventListener("bigguys:cloud-state",ev=>{const remote=ev.detail;if(!remote)return;restoreScheduleUiState();const localDrafts=preserveScheduleDrafts();state=remote;state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts};persistScheduleDrafts();cacheState();if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh();});
 async function initCloud(){ restoreScheduleUiState(); state.scheduleDrafts={...loadScheduleDrafts(),...(state.scheduleDrafts||{})}; if(window.BigGuysCloud){ await window.BigGuysCloud.init(state,remote=>{ restoreScheduleUiState(); const localDrafts=preserveScheduleDrafts(); state=remote; state.scheduleDrafts={...(state.scheduleDrafts||{}),...localDrafts}; persistScheduleDrafts(); cacheState(); if(!document.getElementById("dashboard")?.classList.contains("hidden"))refresh(); }); } }
-setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); window.addEventListener("load",initCloud);
+setInterval(()=>{if(!document.getElementById("dashboard")?.classList.contains("hidden")){refresh()}},2000); // Cloud sync starts only after a verified admin login or restored session.
+// Never start the default DTR/anonymous Firebase login on the admin page.
+window.addEventListener("load",()=>{restoreScheduleUiState();state.scheduleDrafts={...loadScheduleDrafts(),...(state.scheduleDrafts||{})};});
 $("salesChartPeriod")?.addEventListener("change",refreshDashboardCharts);$("carwashChartPeriod")?.addEventListener("change",refreshDashboardCharts);
 $("mobileMenu")?.addEventListener("click",()=>$("adminSidebar")?.classList.toggle("open"));
 document.addEventListener("click",ev=>{const side=$("adminSidebar"),btn=$("mobileMenu");if(window.innerWidth<=950&&side?.classList.contains("open")&&!side.contains(ev.target)&&!btn?.contains(ev.target))side.classList.remove("open");});
