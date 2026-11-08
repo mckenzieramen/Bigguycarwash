@@ -34,8 +34,12 @@
   }
   async function ensureAuth(mode){
     if(!auth)auth=firebase.auth();
+    await auth.authStateReady?.();
+    if(mode==='admin'){
+      if(auth.currentUser && !auth.currentUser.isAnonymous)return auth.currentUser;
+      throw new Error('Admin authentication required. Please log in first.');
+    }
     if(auth.currentUser)return auth.currentUser;
-    if(mode==='admin')throw new Error('Admin authentication required. Please log in first.');
     try{
       const result=await auth.signInAnonymously();
       if(!result?.user)throw new Error('anonymous-auth-failed: Firebase did not return an anonymous user.');
@@ -139,7 +143,9 @@
   async function saveEmployee(employee){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!employee?.id)throw new Error('invalid-argument: employee ID is missing.');await db.doc(`${C.employees}/${employee.id}`).set({...employee,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
   async function saveScheduleWeek(weekKey,scheduleMap){
     await initFirebase();
-    if(!isAdmin())throw new Error('Admin authentication required.');
+    // Wait for Firebase to restore its persisted session before checking admin access.
+    await auth.authStateReady?.();
+    if(!isAdmin())throw new Error('Admin authentication required. Please sign in again before saving. Your selected schedule has not been cleared.');
     if(!/^\d{4}-\d{2}-\d{2}$/.test(String(weekKey||'')))throw new Error('invalid-argument: week key is required.');
     const employees=await getAll(C.employees);
     const batch=db.batch();
