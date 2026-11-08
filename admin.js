@@ -624,7 +624,7 @@ async function saveRosterSchedule(){
  if(scheduleMode==="scheduled"&&!updating){alert("Click EDIT on a saved week before updating it.");return;}
  try{
    const duplicateDays=[];
-   WEEKDAYS.slice(1).forEach(day=>{
+   WEEKDAYS.forEach(day=>{
      const seen=new Set();
      document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`).forEach(sel=>{
        const id=String(sel.value||"");
@@ -636,7 +636,7 @@ async function saveRosterSchedule(){
    if(duplicateDays.length){ alert(`A person can only be scheduled once per day. Please fix: ${[...new Set(duplicateDays)].join(", ")}.`); return; }
 
    const selectedByDay={};
-   WEEKDAYS.slice(1).forEach(day=>{
+   WEEKDAYS.forEach(day=>{
      selectedByDay[day]={};
      document.querySelectorAll(`#scheduleRoster select[data-roster-day="${day}"]`).forEach(sel=>{
        if(sel.value) selectedByDay[day][String(sel.value)]=sel.dataset.rosterSite;
@@ -646,7 +646,7 @@ async function saveRosterSchedule(){
      const weeklySchedules=e?.weeklySchedules&&typeof e.weeklySchedules==="object"?{...e.weeklySchedules}:{};
      // A new week starts completely blank. Only an explicitly selected Day Off is saved as "off".
      const next={Monday:"",Tuesday:"",Wednesday:"",Thursday:"",Friday:"",Saturday:"",Sunday:""};
-     WEEKDAYS.slice(1).forEach(day=>{next[day]=selectedByDay[day][String(e.id)]||"";});
+     WEEKDAYS.forEach(day=>{next[day]=selectedByDay[day][String(e.id)]||"";});
      weeklySchedules[weekOf]=next;
      return {...e,weeklySchedules};
    });
