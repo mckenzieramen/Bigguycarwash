@@ -639,11 +639,30 @@ function dismissScheduleSavedNotice(){
 }
 document.getElementById("scheduleSavedNoticeClose")?.addEventListener("click",dismissScheduleSavedNotice);
 
+function confirmScheduleSave(weekOf,updating){
+ return new Promise(resolve=>{
+  const modal=document.getElementById("scheduleSaveConfirm");
+  if(!modal){resolve(window.confirm("Are you sure you want to "+(updating?"update":"save")+" this schedule?"));return;}
+  const title=document.getElementById("scheduleSaveConfirmTitle");
+  const detail=document.getElementById("scheduleSaveConfirmDetail");
+  const yes=document.getElementById("scheduleSaveConfirmYes");
+  const no=document.getElementById("scheduleSaveConfirmNo");
+  if(title)title.textContent=updating?"Update this schedule?":"Save this schedule?";
+  if(detail)detail.textContent="Are you sure you want to "+(updating?"update":"save")+" the schedule for the week of "+prettyScheduleDate(weekOf)+"? ";
+  if(yes)yes.textContent=updating?"Yes, Update Schedule":"Yes, Save Schedule";
+  modal.hidden=false;
+  const oldFocus=document.activeElement;
+  const finish=value=>{modal.hidden=true;yes.removeEventListener("click",accept);no.removeEventListener("click",cancel);modal.removeEventListener("click",backdrop);document.removeEventListener("keydown",escape);oldFocus?.focus?.();resolve(value);};
+  const accept=()=>finish(true),cancel=()=>finish(false),backdrop=e=>{if(e.target===modal)finish(false);},escape=e=>{if(e.key==="Escape"){e.preventDefault();finish(false);}};
+  yes.addEventListener("click",accept);no.addEventListener("click",cancel);modal.addEventListener("click",backdrop);document.addEventListener("keydown",escape);no.focus();
+ });
+}
 async function saveRosterSchedule(){
  const weekOf=mondayOfWeek($("scheduleWeekOf")?.value||today());
  const assignments=scheduleRosterAssignments();
  const updating=scheduleMode==="scheduled"&&scheduleEditingWeek===weekOf;
  if(scheduleMode==="scheduled"&&!updating){alert("Click EDIT on a saved week before updating it.");return;}
+ if(!await confirmScheduleSave(weekOf,updating))return;
  try{
    const duplicateDays=[];
    WEEKDAYS.forEach(day=>{
