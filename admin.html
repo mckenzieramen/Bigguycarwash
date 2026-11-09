@@ -15,26 +15,6 @@
 </style>
 </head>
 <body class="admin-body">
-<style>
-#adminGeoGate{position:fixed;inset:0;z-index:2147483647;background:#071121f7;display:grid;place-items:center;padding:20px;color:#fff}#adminGeoGate[hidden]{display:none!important}#adminGeoGate>div{max-width:440px;padding:28px;border-radius:18px;border:1px solid #3671a8;background:#10223a}#adminGeoGate button{padding:12px;border:0;border-radius:9px;background:#1889f0;color:white;font-weight:bold}
-</style>
-<div id="adminGeoGate" role="dialog" aria-modal="true"><div><h2>Location verification required</h2><p id="adminGeoMessage">Checking your current GPS location before opening Admin.</p><button id="adminGeoRetry" type="button">CHECK LOCATION AGAIN</button></div></div>
-<script>
-(function(){
- const gate=document.getElementById('adminGeoGate'),msg=document.getElementById('adminGeoMessage'),btn=document.getElementById('adminGeoRetry');
- const sites=[[14.118861,122.950854],[14.0956367,122.9469572],[14.0912778,122.9467222]];
- let verified=false,last=0,busy=false;
- function distance(a,b,c,d){const r=x=>x*Math.PI/180,p=r(c-a),q=r(d-b),v=Math.sin(p/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(q/2)**2;return 12742000*Math.asin(Math.sqrt(v));}
- function valid(p){return sites.some(s=>distance(p.coords.latitude,p.coords.longitude,s[0],s[1])<=250);}
- function lock(reason){verified=false;gate.hidden=false;msg.textContent=reason;btn.disabled=false;}
- function check(){if(busy)return;busy=true;verified=false;gate.hidden=false;msg.textContent='Checking your GPS location…';btn.disabled=true;if(!navigator.geolocation){busy=false;lock('GPS unavailable. Enable location services.');return;}
- navigator.geolocation.getCurrentPosition(p=>{busy=false;if(!valid(p)){lock('Outside approved site. Return to Site 1, 2, or 3 and retry.');return;}verified=true;last=Date.now();gate.hidden=true;btn.disabled=false;},()=>{busy=false;lock('Location denied or unavailable. Enable location permission and retry.');},{enableHighAccuracy:true,maximumAge:0,timeout:12000});}
- btn.addEventListener('click',check);
- if(navigator.geolocation)navigator.geolocation.watchPosition(p=>{if(!valid(p))lock('You moved outside the approved site. Admin is locked.');else if(verified)last=Date.now();},()=>{if(verified)lock('GPS signal lost. Verify your location again.');},{enableHighAccuracy:true,maximumAge:0,timeout:12000});
- setInterval(()=>{if(!verified||document.hidden)return;if(Date.now()-last>15000){lock('Location verification expired. Verify again.');return;}navigator.geolocation.getCurrentPosition(p=>{if(verified){if(valid(p))last=Date.now();else lock('Outside approved site. Admin is locked.');}},()=>lock('GPS unavailable. Verify again.'),{enableHighAccuracy:true,maximumAge:0,timeout:10000});},10000);
- window.addEventListener('pageshow',check);window.addEventListener('focus',()=>{if(!verified)check();});check();
-})();
-</script>
 
 <div class="admin-app">
   <aside class="admin-sidebar" id="adminSidebar">
