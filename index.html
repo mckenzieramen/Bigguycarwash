@@ -156,7 +156,7 @@
         : null;
       window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
       const best=assigned||current;
-      if(!best||best.distance>best.site.radius){
+      if(!best||best.distance>best.site.radius||(assignedSiteIdForWatch&&current?.id!==assignedSiteIdForWatch)){
         if(window.__DTR_ACCESS_UNLOCKED__||window.__DTR_LOCATION_OK__){
           const assignedName=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES?.[assignedSiteIdForWatch]?.name;
           const currentName=current?.site?.name || 'an unapproved location';
@@ -172,11 +172,11 @@
       }
       window.__DTR_LOCATION_OK__=true;
     };
-    locationWatchId=navigator.geolocation.watchPosition(evaluatePosition,()=>{}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+    locationWatchId=navigator.geolocation.watchPosition(evaluatePosition,()=>{if(window.__DTR_LOCATION_OK__||window.__DTR_ACCESS_UNLOCKED__)lockDtrForLocation('GPS lost. Please verify your location again.');}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
     clearInterval(locationPollTimer);
     locationPollTimer=setInterval(()=>{
       if(document.hidden||!navigator.geolocation)return;
-      navigator.geolocation.getCurrentPosition(evaluatePosition,()=>{}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+      navigator.geolocation.getCurrentPosition(evaluatePosition,()=>{if(window.__DTR_LOCATION_OK__||window.__DTR_ACCESS_UNLOCKED__)lockDtrForLocation('GPS unavailable. Please verify your location again.');}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
     },3000);
   }
   function stopLocationWatch(){
