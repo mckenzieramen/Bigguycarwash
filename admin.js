@@ -113,7 +113,7 @@ function previousDayPenaltyApplies(emp,date){
  const status=String(a?.status||"").toLowerCase();
  return status==="absent"||status==="awol";
 }
-function effectiveCommissionRate(emp,date,status){return previousDayPenaltyApplies(emp,date)?0.30:commRate(status);}
+function effectiveCommissionRate(emp,date,status){return String(status||"").toLowerCase()==="early"?commRate(status):(previousDayPenaltyApplies(emp,date)?0.30:commRate(status));}
 async function ensureAutomaticAbsences(){
  const yesterday=previousDate(today()),pending=[];
  if(yesterday<ATTENDANCE_START_DATE)return;
