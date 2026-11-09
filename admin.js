@@ -102,7 +102,7 @@ function scheduledSiteId(e,date=today()){
 function scheduledSiteName(e,date=today()){return siteLabel(scheduledSiteId(e,date));}
 
 function employeeOffDays(e){return Array.isArray(e?.offDays)?e.offDays:[];}
-function isEmployeeOff(e,date){if(!e||!date)return false;const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];const value=scheduleForEmployee(e,date,false)[day];return value==="off"||value==="";}
+function isEmployeeOff(e,date){if(!e||!date)return false;const day=WEEKDAYS[new Date(date+"T00:00:00").getDay()];const value=scheduleForEmployee(e,date,false)[day];return value==="off";}
 function isBeforeHire(e,date){return !!(e?.hireDate&&date<e.hireDate);}
 function previousDate(date){const d=new Date(date+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 function previousDayPenaltyApplies(emp,date){
@@ -175,7 +175,7 @@ function commissionFor(emp,date){
 function statusBadge(status){
  const s=(status||"AWOL").toLowerCase();
  const label=s==="ontime"?"On Time":s.charAt(0).toUpperCase()+s.slice(1);
- const cls=s==="early"?"status-early":s==="late"||s==="awol"?"status-late":s==="absent"?"status-absent":s==="excuse"?"status-excuse":s==="off"?"status-off":"status-ontime";
+ const cls=s==="no schedule"?"status-off":s==="early"?"status-early":s==="late"||s==="awol"?"status-late":s==="absent"?"status-absent":s==="excuse"?"status-excuse":s==="off"?"status-off":"status-ontime";
  return `<span class="${cls}">${label}</span>`;
 }
 function dateLabel(date){return new Date(date+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}
@@ -273,6 +273,7 @@ function displayedAttendanceStatus(employee,date,record){
  }
  if(record)return record.status||"pending";
  if(isEmployeeOff(employee,date))return "off";
+ if(!scheduledSiteId(employee,date))return "no schedule";
  return date>=today()?"pending":"absent";
 }
 function renderAttendanceAdmin(date){
