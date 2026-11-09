@@ -196,7 +196,7 @@
         const assigned=window.BIGGUYS_DTR_SITES[siteId];
         const assignedNearest=nearestForSite(latitude,longitude,assigned);
         const current=nearestApprovedSite(latitude,longitude);
-        const atAssigned=assignedNearest.distance<=assigned.radius;
+        const atAssigned=assignedNearest.distance<=assigned.radius && current?.id===siteId;
         window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
         // The employee is valid if the GPS point is inside the assigned site's
         // own geofence. Do not reject merely because another approved site is
