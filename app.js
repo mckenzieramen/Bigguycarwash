@@ -17,13 +17,18 @@ function scheduledSiteIdForEmployee(employee,date=today()){
  const weekKey=mondayOfWeekISO(date);
  const savedWeeks=employee?.weeklySchedules&&typeof employee.weeklySchedules==="object"?employee.weeklySchedules:{};
  const savedWeek=savedWeeks?.[weekKey]&&typeof savedWeeks[weekKey]==="object"?savedWeeks[weekKey]:null;
- const value=savedWeek ? savedWeek[day] : (employee?.weeklySchedule&&typeof employee.weeklySchedule==="object"?employee.weeklySchedule[day]:"");
- if(value==="off")return "";
- if(value&&window.BIGGUYS_DTR_SITES?.[value])return value;
- return employee?.siteId&&window.BIGGUYS_DTR_SITES?.[employee.siteId]?employee.siteId:"";
+ // Saved weekly schedules are authoritative; blank means No Schedule.
+ const value=savedWeek ? savedWeek[day] : (!Object.keys(savedWeeks).length && employee?.weeklySchedule&&typeof employee.weeklySchedule==="object" ? employee.weeklySchedule[day] : "");
+ return value&&window.BIGGUYS_DTR_SITES?.[value]?value:"";
+}
+function scheduleValueForEmployee(employee,date=today()){
+ const day=DTR_WEEKDAYS[new Date(date+"T00:00:00").getDay()];
+ const weeks=employee?.weeklySchedules&&typeof employee.weeklySchedules==="object"?employee.weeklySchedules:{};
+ const week=weeks[mondayOfWeekISO(date)];
+ return week&&typeof week==="object"?week[day]:(!Object.keys(weeks).length?employee?.weeklySchedule?.[day]:"");
 }
 function employeeSiteId(employee,date=today()){return scheduledSiteIdForEmployee(employee,date);}
-function employeeSiteName(employee,date=today()){const id=employeeSiteId(employee,date);if(!id){const day=DTR_WEEKDAYS[new Date(date+"T00:00:00").getDay()];return `${day} — OFF`;}const s=window.BIGGUYS_DTR_SITES?.[id];return s?.name||"Unassigned Site";}
+function employeeSiteName(employee,date=today()){const id=employeeSiteId(employee,date);if(!id){const day=DTR_WEEKDAYS[new Date(date+"T00:00:00").getDay()];return `${day} — ${scheduleValueForEmployee(employee,date)==="off"?"OFF":"NO SCHEDULE"}`;}const s=window.BIGGUYS_DTR_SITES?.[id];return s?.name||"Unassigned Site";}
 async function verifyEmployeeSite(employee){
  const siteId=employeeSiteId(employee);
  if(!siteId||!window.BIGGUYS_DTR_SITES?.[siteId])return false;
