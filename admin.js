@@ -261,6 +261,20 @@ function attendanceForEmployeeDate(employeeId,date){
   return String(b.clockInAt||b.clockOutAt||"").localeCompare(String(a.clockInAt||a.clockOutAt||""));
  })[0]||null;
 }
+function displayedAttendanceStatus(employee,date,record){
+ if(record?.clockIn){
+  const time=String(record.clockIn).slice(0,5);
+  const scheduled=String(employee?.start||"").slice(0,5);
+  const parse=t=>/^\d{1,2}:\d{2}$/.test(t)?Number(t.split(":")[0])*60+Number(t.split(":")[1]):null;
+  const actualMinutes=parse(time),scheduledMinutes=parse(scheduled);
+  if(actualMinutes!==null&&scheduledMinutes!==null)
+   return actualMinutes>scheduledMinutes?"late":actualMinutes<scheduledMinutes?"early":"ontime";
+  return record.status||"ontime";
+ }
+ if(record)return record.status||"pending";
+ if(isEmployeeOff(employee,date))return "off";
+ return date>=today()?"pending":"absent";
+}
 function renderAttendanceAdmin(date){
  const target=date||today();
  if(target<ATTENDANCE_START_DATE){$("attendanceTable").innerHTML='<p class="muted">Attendance tracking starts November 3, 2026. No attendance or penalties apply before this date.</p>';return;}
@@ -270,7 +284,7 @@ function renderAttendanceAdmin(date){
    const off=isEmployeeOff(e,target);
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===target).reduce((t,x)=>t+Number(x.amount||0),0);
    const rate=isWorkedAttendance(a)?effectiveCommissionRate(e,target,a.status):0;
-   let status=a?.status||(target>=today()?"pending":"absent");
+   let status=displayedAttendanceStatus(e,target,a);
    let action="—";
    if(off && !a) status="off";
    else if(!a) action=`<button type="button" class="small-action mark-excuse" data-id="${e.id}" data-date="${target}">MARK EXCUSE</button>`;
@@ -885,7 +899,7 @@ function refresh(){
  if($("carsWashed"))$("carsWashed").textContent=ds.filter(x=>String(x.category||"").toLowerCase()==="carwash"||(!x.category&&/carwash|wash/i.test(x.note||""))).length;
  if($("employeeTotal"))$("employeeTotal").textContent=state.employees.length;
  if($("payrollTotal"))$("payrollTotal").textContent=money(state.employees.reduce((t,e)=>t+pay(e,d),0));
- const attendanceRows=state.employees.map((e,i)=>{const a=attendanceForEmployeeDate(e.id,d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"pending"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
+ const attendanceRows=state.employees.map((e,i)=>{const a=attendanceForEmployeeDate(e.id,d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(displayedAttendanceStatus(e,d,a)),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
  $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
