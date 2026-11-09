@@ -76,7 +76,7 @@ const WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Sat
 const DTR_SITES={
  site1:{name:"Site 1",lat:14.118861,lng:122.950854,radius:250},
  site2:{name:"Site 2",lat:14.0956367,lng:122.9469572,radius:250},
- site3:{name:"Site 3 - Maple St, Magang, Daet",lat:14.0916583,lng:122.9456855,radius:250}
+ site3:{name:"Site 3 - Maple St, Magang, Daet",lat:14.0912778,lng:122.9467222,radius:250}
 };
 function siteLabel(id){return DTR_SITES[id]?.name||"Unassigned";}
 const SCHEDULE_SITE_OPTIONS=["site1","site2","site3","off"];
@@ -782,7 +782,7 @@ function renderScheduleRoster(){
    }).join("");
  };
  const makeCard=(siteId,title,subtitle,badge,maxRows)=>{
-   const mapUrl=siteId==="site1"?"https://www.google.com/maps/@14.118861,122.950854,16z":siteId==="site3"?"https://www.google.com/maps/search/?api=1&query=14.0916583%2C122.9456855":"";
+   const mapUrl=siteId==="site1"?"https://www.google.com/maps/@14.118861,122.950854,16z":siteId==="site3"?"https://www.google.com/maps/search/?api=1&query=14.0912778%2C122.9467222":"";
    const safeSubtitle=mapUrl?`${subtitle} <a href="${mapUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;color:#78b7ff;font-weight:700;text-decoration:none">VIEW ${siteId==="site3"?"SITE 3 LOCATION":"SITE 1 MAP"} ↗</a>`:subtitle;
    return `<div class="site-roster-card ${siteId==="off"?"dayoff-roster-card":""}">
    <div class="site-roster-title"><div><strong>${title}</strong><small>${safeSubtitle}</small></div><span class="site-roster-badge">${badge}</span></div>
