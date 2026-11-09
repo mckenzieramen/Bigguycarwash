@@ -235,7 +235,7 @@ function refreshRightPanel(){
  }
  const a=records[0],e=capturedEmployee|| (a?state.employees.find(x=>x.id===a.employeeId):state.employees[0]);
  const title=$("rightStatusTitle"),text=$("rightStatusText"),notice=$("rightNoticeTitle"),noticeText=$("rightNoticeText");
- if(e){const attendance=a&&a.employeeId===e.id?a:state.attendance.find(x=>x.employeeId===e.id&&x.date===d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}
+ if(e){const attendance=a&&a.employeeId===e.id?a:attendanceForEmployeeDate(e.id,d);$("rightEmployeeId").textContent=e.id;$("rightEmployeeType").textContent=e.type==="full"?"Full Time":e.type==="semi"?"Semi Full Time":"Part Time";$("rightSchedule").textContent=e.start;$("rightClockIn").textContent=attendance?.clockIn||"—";const st=attendance?.status||"AWOL";title.textContent=attendance?"Attendance Recorded":"Ready for Attendance";text.textContent=attendance?`${e.name} is marked ${st.toUpperCase()}.`:`Latest employee: ${e.name}.`;notice.textContent=attendance?.clockOut?"Clock-out Recorded":attendance?"Clock In Successful!":"Attendance Status";noticeText.textContent=attendance?.clockOut?"Clock-out recorded successfully.":attendance?`${st==="early"?"Early arrival recorded.":st==="late"?"Late arrival recorded.":"You are on time."}`:"No attendance action recorded yet.";}else{$("rightEmployeeId").textContent="—";$('rightEmployeeType').textContent="—";$('rightSchedule').textContent="—";$('rightClockIn').textContent="—";title.textContent="Ready for Attendance";text.textContent="Add an employee to begin tracking attendance.";notice.textContent="Attendance Status";noticeText.textContent="No employee records yet.";}
 }
 
 function wrapTableScroll(id){
@@ -252,12 +252,21 @@ function wrapAllTableScrolls(){
  ['overviewAttendance','employeeTable','attendanceTable','salesTable','payrollTable','payrollDailyTable','reportOutput','reportMonthlyEmployees','topSalesToday','employeeTypeSummary','recentSales'].forEach(wrapTableScroll);
 }
 
+function attendanceForEmployeeDate(employeeId,date){
+ const matches=(state.attendance||[]).filter(a=>String(a.employeeId)===String(employeeId)&&a.date===date);
+ return matches.sort((a,b)=>{
+  const score=x=>x?.clockIn?3:x?.clockOut?2:x?.status==="excuse"?1:0;
+  const delta=score(b)-score(a);
+  if(delta)return delta;
+  return String(b.clockInAt||b.clockOutAt||"").localeCompare(String(a.clockInAt||a.clockOutAt||""));
+ })[0]||null;
+}
 function renderAttendanceAdmin(date){
  const target=date||today();
  if(target<ATTENDANCE_START_DATE){$("attendanceTable").innerHTML='<p class="muted">Attendance tracking starts November 3, 2026. No attendance or penalties apply before this date.</p>';return;}
  if($("attendanceDate") && $("attendanceDate").value!==target)$("attendanceDate").value=target;
  const rows=state.employees.map((e,i)=>{
-   const a=state.attendance.find(x=>String(x.employeeId)===String(e.id)&&x.date===target);
+   const a=attendanceForEmployeeDate(e.id,target);
    const off=isEmployeeOff(e,target);
    const sales=state.sales.filter(x=>String(x.employeeId)===String(e.id)&&x.date===target).reduce((t,x)=>t+Number(x.amount||0),0);
    const rate=isWorkedAttendance(a)?effectiveCommissionRate(e,target,a.status):0;
@@ -275,7 +284,7 @@ async function markEmployeeExcuse(employeeId,date){
  const e=state.employees.find(x=>String(x.id)===String(employeeId));
  if(!e||!date||date<ATTENDANCE_START_DATE)return;
  if(isEmployeeOff(e,date)){alert(`${e.name} is scheduled OFF on ${date}.`);return;}
- const existing=state.attendance.find(x=>String(x.employeeId)===String(employeeId)&&x.date===date);
+ const existing=attendanceForEmployeeDate(employeeId,date);
  if(existing?.clockIn){alert("This employee already has a Time In record for this date.");return;}
  const record={...(existing||{}),id:existing?.id||`attendance_${String(employeeId).replace(/[^a-zA-Z0-9_-]/g,"_")}_${date}`,employeeId,date,status:"excuse",punchType:"manual",markedExcuseAt:new Date().toISOString()};
  try{
@@ -876,7 +885,7 @@ function refresh(){
  if($("carsWashed"))$("carsWashed").textContent=ds.filter(x=>String(x.category||"").toLowerCase()==="carwash"||(!x.category&&/carwash|wash/i.test(x.note||""))).length;
  if($("employeeTotal"))$("employeeTotal").textContent=state.employees.length;
  if($("payrollTotal"))$("payrollTotal").textContent=money(state.employees.reduce((t,e)=>t+pay(e,d),0));
- const attendanceRows=state.employees.map((e,i)=>{const a=state.attendance.find(x=>x.employeeId===e.id&&x.date===d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"pending"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
+ const attendanceRows=state.employees.map((e,i)=>{const a=attendanceForEmployeeDate(e.id,d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(a?.status||"pending"),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
  $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
