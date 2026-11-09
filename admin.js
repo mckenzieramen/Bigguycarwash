@@ -76,7 +76,7 @@ const WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Sat
 const DTR_SITES={
  site1:{name:"Site 1",lat:14.118861,lng:122.950854,radius:250},
  site2:{name:"Site 2",lat:14.0956367,lng:122.9469572,radius:250},
- site3:{name:"Site 3",lat:14.091233,lng:122.9467024,radius:250}
+ site3:{name:"Site 3 - Southwoods Subdivision",lat:14.0931147,lng:122.94424,radius:250}
 };
 function siteLabel(id){return DTR_SITES[id]?.name||"Unassigned";}
 const SCHEDULE_SITE_OPTIONS=["site1","site2","site3","off"];
