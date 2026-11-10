@@ -124,7 +124,7 @@
     window.__DTR_LOCATION_OK__=false;window.__DTR_CURRENT_SITE_ID__=null;
     locationError.textContent='';locationMessage.textContent='Checking your current GPS location. Location access is required before the DTR password and face scanner can open.';retry.disabled=true;retry.textContent='CHECKING LOCATION…';
     if(!navigator.geolocation){locationError.textContent='This device/browser does not support GPS location. DTR access is blocked.';retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';return;}
-    navigator.geolocation.getCurrentPosition(pos=>{
+    const onLocationSuccess=pos=>{
       const {latitude,longitude,accuracy}=pos.coords;
       const best=nearestApprovedSite(latitude,longitude);
       if(best&&best.distance<=best.site.radius){
@@ -138,17 +138,28 @@
         locationError.textContent=`DTR is restricted to Site 1, Site 2, or Site 3. Nearest approved site: ${best?best.site.name:'—'} (${best?Math.round(best.distance):'—'} m away).`;
         retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';
       }
-    },err=>{
-      const msg=err.code===1?'Location permission was denied. Please allow location access for this DTR website.':err.code===2?'Your location could not be determined. Turn on GPS/location services and try again.':'Location check timed out. Please try again.';
-      locationError.textContent=msg;retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';
-    },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    };
+    const onLocationError=err=>{
+      if(err.code!==1){
+        locationMessage.textContent='Trying an alternative location reading…';
+        navigator.geolocation.getCurrentPosition(onLocationSuccess,finalError=>{
+          const msg=finalError.code===1?'Location permission was denied. Please allow location access for this DTR website.':finalError.code===2?'Your device could not determine its location. Enable precise location and try outdoors.':'Location check timed out. Enable GPS and try again.';
+          locationError.textContent=msg;retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';
+        },{enableHighAccuracy:false,timeout:20000,maximumAge:15000});
+        return;
+      }
+      locationError.textContent='Location permission was denied. Allow location access for this website.';retry.disabled=false;retry.textContent='CHECK LOCATION AGAIN';
+    };
+    navigator.geolocation.getCurrentPosition(onLocationSuccess,onLocationError,{enableHighAccuracy:true,timeout:25000,maximumAge:5000});
   }
   let locationWatchId=null;
   let locationPollTimer=null;
   let assignedSiteIdForWatch=null;
   function startLocationWatch(){
     if(locationWatchId!==null||!navigator.geolocation)return;
+    let consecutiveGpsFailures=0;
     const evaluatePosition=(pos)=>{
+      consecutiveGpsFailures=0;
       const {latitude,longitude}=pos.coords;
       const current=nearestApprovedSite(latitude,longitude);
       const assigned=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES[assignedSiteIdForWatch]
@@ -172,11 +183,11 @@
       }
       window.__DTR_LOCATION_OK__=true;
     };
-    locationWatchId=navigator.geolocation.watchPosition(evaluatePosition,()=>{if(window.__DTR_LOCATION_OK__||window.__DTR_ACCESS_UNLOCKED__)lockDtrForLocation('GPS lost. Please verify your location again.');}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+    locationWatchId=navigator.geolocation.watchPosition(evaluatePosition,()=>{consecutiveGpsFailures++;if(consecutiveGpsFailures>=3&&(window.__DTR_LOCATION_OK__||window.__DTR_ACCESS_UNLOCKED__))lockDtrForLocation('GPS unavailable after repeated checks. Please verify your location again.');}, {enableHighAccuracy:true,timeout:12000,maximumAge:5000});
     clearInterval(locationPollTimer);
     locationPollTimer=setInterval(()=>{
       if(document.hidden||!navigator.geolocation)return;
-      navigator.geolocation.getCurrentPosition(evaluatePosition,()=>{if(window.__DTR_LOCATION_OK__||window.__DTR_ACCESS_UNLOCKED__)lockDtrForLocation('GPS unavailable. Please verify your location again.');}, {enableHighAccuracy:true,timeout:5000,maximumAge:0});
+      navigator.geolocation.getCurrentPosition(evaluatePosition,()=>{consecutiveGpsFailures++;if(consecutiveGpsFailures>=3&&(window.__DTR_LOCATION_OK__||window.__DTR_ACCESS_UNLOCKED__))lockDtrForLocation('GPS unavailable after repeated checks. Please verify your location again.');}, {enableHighAccuracy:true,timeout:12000,maximumAge:5000});
     },3000);
   }
   function stopLocationWatch(){
