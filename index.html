@@ -156,7 +156,7 @@
         : null;
       window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
       const best=assigned||current;
-      if(!best||best.distance>best.site.radius||(assignedSiteIdForWatch&&current?.id!==assignedSiteIdForWatch)){
+      if(!best||best.distance>best.site.radius||(assignedSiteIdForWatch&&assigned&&assigned.distance>assigned.site.radius)){
         if(window.__DTR_ACCESS_UNLOCKED__||window.__DTR_LOCATION_OK__){
           const assignedName=assignedSiteIdForWatch&&window.BIGGUYS_DTR_SITES?.[assignedSiteIdForWatch]?.name;
           const currentName=current?.site?.name || 'an unapproved location';
@@ -196,7 +196,7 @@
         const assigned=window.BIGGUYS_DTR_SITES[siteId];
         const assignedNearest=nearestForSite(latitude,longitude,assigned);
         const current=nearestApprovedSite(latitude,longitude);
-        const atAssigned=assignedNearest.distance<=assigned.radius && current?.id===siteId;
+        const atAssigned=assignedNearest.distance<=assigned.radius;
         window.__DTR_CURRENT_SITE_ID__=current?current.id:null;
         // The employee is valid if the GPS point is inside the assigned site's
         // own geofence. Do not reject merely because another approved site is
