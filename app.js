@@ -187,6 +187,11 @@ async function verifyFace(detection){
   const current=updateAttendanceControls(match.employee);
   $("cameraStatus").textContent=current?.clockOut?`✓ ${match.employee.name} already completed TIME IN and TIME OUT today.`:current?.clockIn?`✓ ${match.employee.name} is already SIGNED IN — TIME OUT is available.`:`✓ ${match.employee.name} recognized — TIME IN is available.`;
   setOval("good");
+  // A verified first face scan automatically records Time In once per day.
+  // Existing Time Out remains manual to prevent accidental clock-outs.
+  if(!current?.clockIn && !recordBusy && performance.now()>=attendanceCooldownUntil){
+   await record("in");
+  }
  }else{resetRecognition(match.employee?`Face detected, but match is not strong enough (${match.distance.toFixed(2)}). Look straight at the camera.`:"Face captured, but this employee is not enrolled.");setOval("bad")}
 }
 async function scanLoop(){
