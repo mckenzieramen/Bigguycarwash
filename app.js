@@ -274,7 +274,7 @@ async function record(type){
    const diff=minutes(now)-minutes(employee.start),status=diff>0?"late":diff<0?"early":"ontime";
    const scheduledSiteId=employeeSiteId(employee,date);
    const actualSiteId=window.__DTR_CURRENT_SITE_ID__||"";
-   attendance={id:`attendance_${String(employee.id).replace(/[^a-zA-Z0-9_-]/g,"_")}_${date}`,date,employeeId:employee.id,clockIn:now,clockInAt:iso,clockOut:null,clockOutAt:null,status,punchType:"in",scheduledSiteId,actualSiteId};
+   attendance={id:`attendance_${String(employee.id).replace(/[^a-zA-Z0-9_-]/g,"_")}_${date}`,date,employeeId:employee.id,clockIn:now,clockInAt:iso,clockOut:null,clockOutAt:null,status,scheduledStart:employee.start||"",punchType:"in",scheduledSiteId,actualSiteId};
    if(window.BigGuysCloud?.saveAttendance){ state=await window.BigGuysCloud.saveAttendance(attendance); cacheState(); } else { state.attendance=state.attendance||[]; state.attendance.push(attendance); save(); }
    const statusText=status==="late"?`🔴 LATE — ${diff} minutes late`:status==="early"?`🔵 EARLY — ${Math.abs(diff)} minutes early`:"ON TIME";
    $("result").innerHTML=`<div class="result ${status==="late"?"late-result":"success"}>✓ TIME IN RECORDED<br><br>${employee.name}<br>${now}<br><br>${statusText}</div>`;
