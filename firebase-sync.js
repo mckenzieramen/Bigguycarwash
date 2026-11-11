@@ -50,7 +50,11 @@
       throw new Error(`DTR Firebase authentication failed (${code}). ${msg}`);
     }
   }
-  async function getAll(col){const snap=await db.collection(col).get();return snap.docs.map(d=>({id:d.id,...(d.data()||{})}));}
+  async function getAll(col){const snap=await db.collection(col).get();return snap.docs.map(d=>{
+    const record={id:d.id,...(d.data()||{})};
+    if(col===C.attendance)record.id=d.id;
+    return record;
+  });}
   async function getDocSafe(path){const s=await db.doc(path).get();return s.exists?(s.data()||{}):{};}
   function objectFromDocs(rows){const o={};rows.forEach(r=>{if(r.id)o[r.id]=r;});return o;}
   async function readCloud(){
@@ -73,13 +77,12 @@
       const samples=normalizeFaceRecord(r.samples);
       if(samples.length){faceMap[id]=samples;faceTimes[id]=r.updatedAtISO||r.faceUpdatedAt||null;}
     });
-    const attendanceRows=attendance.map(r=>{const x={...r};delete x.id;return x;});
     const salesRows=sales.map(r=>{const x={...r};delete x.id;return x;});
     const reportMap={};reports.forEach(r=>{if(r.id){const x={...r};delete x.id;delete x.date;reportMap[r.date||r.id]=x;}});
     let lastFaceCapture=null;
     // Lightweight latest capture is optional and deliberately kept separate from history.
     try{const latest=await db.doc('bigguys_meta/attendance').get();if(latest.exists)lastFaceCapture=latest.data()?.lastFaceCapture||null;}catch(e){}
-    return clean({employees:employees.map(x=>{const y={...x};if(!y.id)y.id=x.id;const enrolled=faceMap[String(y.id)]?.length>=5||y.faceEnrolled===true;y.faceEnrolled=!!enrolled;if(enrolled)y.faceSampleCount=faceMap[String(y.id)]?.length||Number(y.faceSampleCount||5);return y;}),attendance:attendanceRows,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
+    return clean({employees:employees.map(x=>{const y={...x};if(!y.id)y.id=x.id;const enrolled=faceMap[String(y.id)]?.length>=5||y.faceEnrolled===true;y.faceEnrolled=!!enrolled;if(enrolled)y.faceSampleCount=faceMap[String(y.id)]?.length||Number(y.faceSampleCount||5);return y;}),attendance,sales:salesRows,faces:faceMap,faceUpdatedAt:faceTimes,dailyReports:reportMap,lastFaceCapture});
   }
   async function migrateLegacyIfNeeded(initial){
     if(!isAdmin())return readCloud();
@@ -159,7 +162,8 @@
     await initFirebase();
     await auth.authStateReady?.();
     if(!isAdmin())throw new Error('Admin authentication required.');
-    if(!record?.id||! /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(clockIn))throw new Error('Enter a valid Time In.');
+    if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(clockIn))throw new Error('Enter a valid Time In.');
+    if(!record?.id)throw new Error('Attendance record is unavailable. Refresh and try again.');
     const ref=db.doc(`${C.attendance}/${record.id}`);
     const employeeRef=db.doc(`${C.employees}/${employeeId}`);
     await db.runTransaction(async tx=>{
