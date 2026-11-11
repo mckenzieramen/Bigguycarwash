@@ -301,6 +301,12 @@ function renderAttendanceAdmin(date){
    const employee=state.employees[index];
    const record=attendanceForEmployeeDate(employee.id,target);
    button.onclick=()=>openAdminTimeEditor(employee,record);
+   if(record.clockInEditReason){
+     const note=document.createElement("small");
+     note.className="time-in-edit-note";
+     note.textContent="Correction reason: "+record.clockInEditReason;
+     button.after(note);
+   }
  });
  wrapTableScroll("attendanceTable");
 }
@@ -312,9 +318,14 @@ function openAdminTimeEditor(employee,record){
  dialog.id="adminTimeEditor";
  dialog.className="card inner";
  dialog.innerHTML=`<form><h2></h2><p class="muted"></p><label>Time (PH)<input type="time" required></label>
+ <label class="time-edit-reason" hidden>Reason for change<textarea rows="3" maxlength="300" placeholder="Enter the reason for correcting the Time In"></textarea></label>
  <p role="alert"></p><button type="button" class="small-action">Cancel</button> <button type="submit" class="small-action">Save</button></form>`;
  const form=dialog.querySelector("form");
  const input=form.querySelector("input");
+ const reason=form.querySelector("textarea");
+ reason.closest("label").hidden=!record;
+ reason.disabled=!record;
+ reason.required=Boolean(record);
  const cancel=form.querySelector('button[type="button"]');
  const saveButton=form.querySelector('button[type="submit"]');
  const error=form.querySelector('[role="alert"]');
@@ -328,11 +339,13 @@ function openAdminTimeEditor(employee,record){
  form.onsubmit=async event=>{
    event.preventDefault();
    if(input.value===String(original||"").slice(0,5)){dialog.close();return;}
-   saveButton.disabled=cancel.disabled=input.disabled=true;
+   const note=reason.value.trim();
+   if(record&&!note){error.textContent="Enter a reason for changing the Time In.";reason.focus();return;}
+   saveButton.disabled=cancel.disabled=input.disabled=reason.disabled=true;
    error.textContent="";
    try{
      state=record
-       ?await cloud.correctClockIn(employee.id,record,input.value)
+       ?await cloud.correctClockIn(employee.id,record,input.value,note)
        :await cloud.updateRegularStart(employee.id,original,input.value);
      cacheState();
      refresh();
@@ -340,6 +353,7 @@ function openAdminTimeEditor(employee,record){
    }catch(err){
      error.textContent=err?.message||"Unable to save the time. Please try again.";
      saveButton.disabled=cancel.disabled=input.disabled=false;
+     reason.disabled=!record;
    }
  };
  document.body.append(dialog);
