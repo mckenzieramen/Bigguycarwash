@@ -13,6 +13,45 @@
 .admin-sidebar .side-nav:hover .nav-icon{border-color:#39bfff;background:linear-gradient(145deg,#104368,#0b2f4c)}
 .admin-sidebar .nav-chevron{margin-left:auto;color:#8fb4cc;font-size:12px}
 </style>
+<style id="adminTimeEditorStyle">
+#adminTimeEditor{
+  color-scheme:dark;
+  box-sizing:border-box;
+  width:min(440px,calc(100% - 32px));
+  max-height:calc(100dvh - 32px);
+  margin:auto;
+  padding:24px;
+  overflow:auto;
+  color:#edf5ff;
+  background:#102235;
+  border:1px solid #4e718f;
+  border-radius:16px;
+  box-shadow:0 20px 60px #000a;
+}
+#adminTimeEditor::backdrop{background:rgba(2,10,19,.76)}
+#adminTimeEditor h2{margin:0 0 6px;color:#f5f9ff;font-size:clamp(19px,4vw,23px);line-height:1.25}
+#adminTimeEditor .muted{margin:0 0 20px;color:#b6cce0}
+#adminTimeEditor label{display:block;color:#e0ecf9;font-weight:600}
+#adminTimeEditor input[type="time"]{
+  box-sizing:border-box;
+  width:100%;
+  min-height:48px;
+  margin-top:8px;
+  padding:10px 12px;
+  color:#f5f9ff;
+  background:#091827;
+  border:1px solid #587a98;
+  border-radius:9px;
+  font-size:16px;
+}
+#adminTimeEditor :is(input,button):focus-visible{outline:2px solid #7ed7ff;outline-offset:3px}
+#adminTimeEditor .small-action{min-height:44px;margin:16px 6px 0 0;padding:0 16px;border-radius:8px;font-size:14px;font-weight:700}
+#adminTimeEditor button[type="button"]{color:#edf5ff;background:#29435a;border:1px solid #6988a5}
+#adminTimeEditor button[type="submit"]{color:#fff;background:#1267c6;border:1px solid #67b5ff}
+#adminTimeEditor button:disabled{opacity:.65;cursor:wait}
+#adminTimeEditor [role="alert"]{margin:12px 0 0;color:#ffc4c7}
+#adminTimeEditor [role="alert"]:empty{display:none}
+</style>
 </head>
 <body class="admin-body">
 
