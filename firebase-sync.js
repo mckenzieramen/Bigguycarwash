@@ -158,12 +158,14 @@
     });
     return readCloud();
   }
-  async function correctClockIn(employeeId,record,clockIn){
+  async function correctClockIn(employeeId,record,clockIn,reason){
     await initFirebase();
     await auth.authStateReady?.();
     if(!isAdmin())throw new Error('Admin authentication required.');
     if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(clockIn))throw new Error('Enter a valid Time In.');
     if(!record?.id)throw new Error('Attendance record is unavailable. Refresh and try again.');
+    const note=String(reason??'').trim();
+    if(!note||note.length>300)throw new Error('Enter a reason of 1 to 300 characters.');
     const ref=db.doc(`${C.attendance}/${record.id}`);
     const employeeRef=db.doc(`${C.employees}/${employeeId}`);
     await db.runTransaction(async tx=>{
@@ -183,6 +185,7 @@
         clockIn,clockInAt:clockInAt.toISOString(),scheduledStart,status,
         originalClockIn:current.originalClockIn??current.clockIn,
         originalClockInAt:current.originalClockInAt??current.clockInAt??null,
+        clockInEditReason:note,
         clockInEditedBy:auth.currentUser.uid,
         clockInEditedAt:firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt:firebase.firestore.FieldValue.serverTimestamp()
