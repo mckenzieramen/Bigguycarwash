@@ -262,9 +262,10 @@ function attendanceForEmployeeDate(employeeId,date){
  })[0]||null;
 }
 function displayedAttendanceStatus(employee,date,record){
+ if(record?.clockIn && ["early","ontime","late"].includes(record.status)) return record.status;
  if(record?.clockIn){
   const time=String(record.clockIn).slice(0,5);
-  const scheduled=String(employee?.start||"").slice(0,5);
+  const scheduled=String(record.scheduledStart||employee?.start||"").slice(0,5);
   const parse=t=>/^\d{1,2}:\d{2}$/.test(t)?Number(t.split(":")[0])*60+Number(t.split(":")[1]):null;
   const actualMinutes=parse(time),scheduledMinutes=parse(scheduled);
   if(actualMinutes!==null&&scheduledMinutes!==null)
@@ -288,12 +289,61 @@ function renderAttendanceAdmin(date){
    let status=displayedAttendanceStatus(e,target,a);
    let action="—";
    if(off && !a) status="off";
+   else if(a?.clockIn) action='<button type="button" class="small-action edit-clock-in">EDIT TIME IN</button>';
    else if(!a) action=`<button type="button" class="small-action mark-excuse" data-id="${e.id}" data-date="${target}">MARK EXCUSE</button>`;
-   return [e.id,e.name,e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(status),money(sales),`${Math.round(rate*100)}%`,money(commissionFor(e,target)),money(pay(e,target)),action];
+   return [e.id,e.name,a?.scheduledStart||e.start,a?.clockIn||"—",a?.clockOut||"—",dtrHours(a),statusBadge(status),money(sales),`${Math.round(rate*100)}%`,money(commissionFor(e,target)),money(pay(e,target)),action];
  });
  $("attendanceTable").innerHTML=table(rows,["ID","Employee","Scheduled","Time In","Time Out","Hours","Status","Sales","Commission %","Commission","Daily Pay","Action"]);
  document.querySelectorAll(".mark-excuse").forEach(btn=>btn.onclick=()=>markEmployeeExcuse(btn.dataset.id,btn.dataset.date));
+ $("attendanceTable").querySelectorAll("tbody tr").forEach((row,index)=>{
+   const button=row.querySelector(".edit-clock-in");
+   if(!button)return;
+   const employee=state.employees[index];
+   const record=attendanceForEmployeeDate(employee.id,target);
+   button.onclick=()=>openAdminTimeEditor(employee,record);
+ });
  wrapTableScroll("attendanceTable");
+}
+function openAdminTimeEditor(employee,record){
+ const cloud=window.BigGuysCloud;
+ if(!cloud?.isAdmin?.()){alert("Admin sign-in is required.");return;}
+ if($("adminTimeEditor"))return;
+ const dialog=document.createElement("dialog");
+ dialog.id="adminTimeEditor";
+ dialog.className="card inner";
+ dialog.innerHTML=`<form><h2></h2><p class="muted"></p><label>Time (PH)<input type="time" required></label>
+ <p role="alert"></p><button type="button" class="small-action">Cancel</button> <button type="submit" class="small-action">Save</button></form>`;
+ const form=dialog.querySelector("form");
+ const input=form.querySelector("input");
+ const cancel=form.querySelector('button[type="button"]');
+ const saveButton=form.querySelector('button[type="submit"]');
+ const error=form.querySelector('[role="alert"]');
+ const original=record?record.clockIn:employee.start;
+ form.querySelector("h2").textContent=record?"Edit Time In":"Edit Regular Start Time";
+ form.querySelector(".muted").textContent=record?`${employee.name} · ${record.date}`:employee.name;
+ input.value=String(original||"").slice(0,5);
+ cancel.onclick=()=>dialog.close();
+ dialog.addEventListener("close",()=>dialog.remove(),{once:true});
+ dialog.addEventListener("cancel",event=>{if(saveButton.disabled)event.preventDefault();});
+ form.onsubmit=async event=>{
+   event.preventDefault();
+   if(input.value===String(original||"").slice(0,5)){dialog.close();return;}
+   saveButton.disabled=cancel.disabled=input.disabled=true;
+   error.textContent="";
+   try{
+     state=record
+       ?await cloud.correctClockIn(employee.id,record,input.value)
+       :await cloud.updateRegularStart(employee.id,original,input.value);
+     cacheState();
+     refresh();
+     dialog.close();
+   }catch(err){
+     error.textContent=err?.message||"Unable to save the time. Please try again.";
+     saveButton.disabled=cancel.disabled=input.disabled=false;
+   }
+ };
+ document.body.append(dialog);
+ dialog.showModal();
 }
 async function markEmployeeExcuse(employeeId,date){
  const e=state.employees.find(x=>String(x.id)===String(employeeId));
@@ -903,7 +953,11 @@ function refresh(){
  const attendanceRows=state.employees.map((e,i)=>{const a=attendanceForEmployeeDate(e.id,d);const sales=state.sales.filter(x=>x.employeeId===e.id&&x.date===d).reduce((t,x)=>t+Number(x.amount||0),0);return[i+1,e.name,e.type,e.start,a?.clockIn||"—",statusBadge(displayedAttendanceStatus(e,d,a)),money(sales),money(sales*effectiveCommissionRate(e,d,a?.status||"awol")),money(pay(e,d))]});
  $("overviewAttendance").innerHTML=table(attendanceRows,["#","Employee","Type","Schedule","Clock In","Status","Sales","Commission","Daily Pay"]);
  renderAttendanceAdmin(attendanceDateValue());
- $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
+ $("employeeTable").innerHTML=table(state.employees.map(e=>[e.id,e.name,e.type,e.start,scheduledSiteName(e,d),money(baseRate(e.type)),state.faces[e.id]?"Enrolled":"Not enrolled",`<button type="button" class="edit-regular-start">EDIT START TIME</button> <button class="history-employee" data-id="${e.id}">HISTORY</button> <button class="face-employee" data-id="${e.id}">FACE</button> <button class="delete-employee" data-id="${e.id}">DELETE</button>`]),["ID","Name","Type","Start","Today's Site","Base/Day","Face","Action"]);
+ $("employeeTable").querySelectorAll(".edit-regular-start").forEach((button,index)=>{
+   const employee=state.employees[index];
+   button.onclick=()=>openAdminTimeEditor(employee);
+ });
  document.querySelectorAll(".history-employee").forEach(btn=>btn.onclick=()=>showEmployeeHistory(btn.dataset.id));
 document.querySelectorAll(".face-employee").forEach(btn=>btn.onclick=()=>openEnrollmentModal(btn.dataset.id));
 document.querySelectorAll(".delete-employee").forEach(btn=>btn.onclick=()=>deleteEmployee(btn.dataset.id));
