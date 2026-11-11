@@ -141,6 +141,51 @@
     return readCloud();
   }
   async function saveEmployee(employee){await initFirebase();if(!isAdmin())throw new Error('Admin authentication required.');if(!employee?.id)throw new Error('invalid-argument: employee ID is missing.');await db.doc(`${C.employees}/${employee.id}`).set({...employee,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});return readCloud();}
+  async function updateRegularStart(employeeId,previousStart,start){
+    await initFirebase();
+    await auth.authStateReady?.();
+    if(!isAdmin())throw new Error('Admin authentication required.');
+    if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(start))throw new Error('Enter a valid start time.');
+    const ref=db.doc(`${C.employees}/${employeeId}`);
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists)throw new Error('Employee no longer exists.');
+      if(snap.data().start!==previousStart)throw new Error('Start time changed. Refresh and try again.');
+      tx.update(ref,{start,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    });
+    return readCloud();
+  }
+  async function correctClockIn(employeeId,record,clockIn){
+    await initFirebase();
+    await auth.authStateReady?.();
+    if(!isAdmin())throw new Error('Admin authentication required.');
+    if(!record?.id||! /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(clockIn))throw new Error('Enter a valid Time In.');
+    const ref=db.doc(`${C.attendance}/${record.id}`);
+    const employeeRef=db.doc(`${C.employees}/${employeeId}`);
+    await db.runTransaction(async tx=>{
+      const [snap,employee]=await Promise.all([tx.get(ref),tx.get(employeeRef)]);
+      const current=snap.data();
+      if(!employee.exists||!current?.clockIn||String(current.employeeId)!==String(employeeId)||current.date!==record.date||current.date<ATTENDANCE_START_DATE)
+        throw new Error('Attendance record is unavailable.');
+      if(current.clockIn!==record.clockIn||current.clockInAt!==record.clockInAt)
+        throw new Error('Time In changed. Refresh and try again.');
+      const clockInAt=new Date(`${current.date}T${clockIn}:00+08:00`);
+      if(!Number.isFinite(clockInAt.getTime())||clockInAt.getTime()>Date.now())throw new Error('Time In cannot be in the future.');
+      const clockOutAt=current.clockOutAt|| (current.clockOut?`${current.date}T${current.clockOut.slice(0,5)}:00+08:00`:null);
+      if(clockOutAt&&clockInAt.getTime()>Date.parse(clockOutAt))throw new Error('Time In cannot be after Time Out.');
+      const scheduledStart=String(current.scheduledStart||employee.data().start||'').slice(0,5);
+      const status=scheduledStart?(clockIn>scheduledStart?'late':clockIn<scheduledStart?'early':'ontime'):current.status||'ontime';
+      tx.update(ref,{
+        clockIn,clockInAt:clockInAt.toISOString(),scheduledStart,status,
+        originalClockIn:current.originalClockIn??current.clockIn,
+        originalClockInAt:current.originalClockInAt??current.clockInAt??null,
+        clockInEditedBy:auth.currentUser.uid,
+        clockInEditedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    return readCloud();
+  }
   async function saveScheduleWeek(weekKey,scheduleMap){
     await initFirebase();
     // Wait for Firebase to restore its persisted session before checking admin access.
@@ -305,5 +350,5 @@
   async function adminLogout(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;}unsubscribers.forEach(fn=>fn&&fn());unsubscribers=[];if(auth)await auth.signOut();readyPromise=null;window.__BIGGUYS_CURRENT_STATE=null;}
   async function getAdminProfilePublic(){return getAdminProfile();}
   async function refreshCloud(){await initFirebase();await ensureAuth(isAdmin()?'admin':'dtr');const next=await readCloud();window.__BIGGUYS_CURRENT_STATE=next;status({ready:true,status:'connected',lastSyncAt:new Date().toISOString(),lastSyncError:null});return next;}
-  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,refresh:refreshCloud,adminLogin,adminLogout,restoreAdminSession,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,saveScheduleWeek,cleanupExpiredSchedules,deleteScheduleWeek,deleteEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
+  window.BigGuysCloud={configured,isAdmin,ensureAuth,init,refresh:refreshCloud,adminLogin,adminLogout,restoreAdminSession,getAdminProfile:getAdminProfilePublic,push:pushState,reserveEmployeeId,saveEmployee,updateRegularStart,correctClockIn,saveScheduleWeek,cleanupExpiredSchedules,deleteScheduleWeek,deleteEmployee,saveFaceEnrollment,saveSale,saveAttendance,saveDailyReport,getStatus:()=>window.BIGGUYS_CLOUD||{configured,ready:false,status:'waiting'}};
 })();
