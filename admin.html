@@ -44,7 +44,14 @@
   border-radius:9px;
   font-size:16px;
 }
-#adminTimeEditor :is(input,button):focus-visible{outline:2px solid #7ed7ff;outline-offset:3px}
+#adminTimeEditor .time-edit-reason{margin-top:14px}
+#adminTimeEditor .time-edit-reason[hidden]{display:none}
+#adminTimeEditor textarea{
+  box-sizing:border-box;width:100%;margin-top:8px;padding:10px 12px;resize:vertical;
+  color:#f5f9ff;background:#091827;border:1px solid #587a98;border-radius:9px;font:inherit;
+}
+.time-in-edit-note{display:block;margin:6px auto 0;max-width:240px;white-space:normal;overflow-wrap:anywhere;color:#b6cce0}
+#adminTimeEditor :is(input,textarea,button):focus-visible{outline:2px solid #7ed7ff;outline-offset:3px}
 #adminTimeEditor .small-action{min-height:44px;margin:16px 6px 0 0;padding:0 16px;border-radius:8px;font-size:14px;font-weight:700}
 #adminTimeEditor button[type="button"]{color:#edf5ff;background:#29435a;border:1px solid #6988a5}
 #adminTimeEditor button[type="submit"]{color:#fff;background:#1267c6;border:1px solid #67b5ff}
@@ -90,7 +97,7 @@
   </main>
 </div>
 <div id="enrollmentModal" class="enrollment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="enrollmentModalTitle"><div class="enrollment-modal-backdrop"></div><div class="enrollment-modal-card"><div class="enrollment-modal-head"><div><span class="section-kicker">STEP 2 OF 2</span><h2 id="enrollmentModalTitle">Face Enrollment</h2><p id="enrollmentEmployeeLabel" class="muted">Preparing employee face scan…</p></div><button type="button" id="closeEnrollmentModal" class="modal-close" aria-label="Close">×</button></div><div class="enrollment-identity"><div><span>Employee ID</span><strong id="enrollmentEmployeeId">—</strong></div><div><span>Employee</span><strong id="enrollmentEmployeeName">—</strong></div></div><select id="enrollEmployee" class="hidden" aria-hidden="true"></select><div class="camera-box admin-camera enrollment-modal-camera"><video id="enrollCamera" autoplay muted playsinline></video><div id="enrollOvalFrame" class="face-frame enrollment-oval oval-red"></div><div id="enrollStatus" class="camera-status">Starting face scan…</div></div><button id="startEnrollCamera" type="button" class="hidden">START CAMERA</button><button id="enrollFace" type="button" class="hidden" disabled>ENROLL FACE</button><button id="retryEnrollment" type="button" class="hidden">↻ RETRY FACE SCAN</button><div class="enrollment-steps" aria-label="Face enrollment steps"><span>1 Normal</span><span>2 Left</span><span>3 Right</span><span>4 Up/Down</span><span>5 Normal</span></div><div id="enrollResult"></div></div></div>
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script><script src="firebase-config.js"></script><script src="firebase-sync.js?v=20261111-attendance-record-id"></script><style id="premiumScheduleSavedNoticeStyle">
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script><script src="firebase-config.js"></script><script src="firebase-sync.js?v=20261111-time-in-reason"></script><style id="premiumScheduleSavedNoticeStyle">
 #scheduleSavedNotice[hidden]{display:none!important}
 #scheduleSavedNotice{position:fixed;right:24px;bottom:26px;z-index:99999;display:flex;align-items:center;gap:14px;width:min(390px,calc(100vw - 32px));box-sizing:border-box;padding:17px 18px;border:1px solid rgba(108,184,229,.3);border-radius:18px;background:linear-gradient(125deg,#112b3d,#091722 75%);color:#eaf7ff;box-shadow:0 20px 55px rgba(0,0,0,.46),inset 0 1px rgba(255,255,255,.08);font-family:inherit;opacity:0;transform:translateY(18px) scale(.97);transition:opacity .25s ease,transform .25s ease;pointer-events:none}
 #scheduleSavedNotice.visible{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
@@ -119,5 +126,5 @@
 #scheduleSaveConfirm button:focus-visible{outline:3px solid #92d7ff;outline-offset:3px}
 </style>
 <div id="scheduleSaveConfirm" hidden role="dialog" aria-modal="true" aria-labelledby="scheduleSaveConfirmTitle" aria-describedby="scheduleSaveConfirmDetail"><div class="confirm-card"><div class="confirm-icon" aria-hidden="true">?</div><h2 id="scheduleSaveConfirmTitle">Save this schedule?</h2><p id="scheduleSaveConfirmDetail">Are you sure you want to save this schedule?</p><div class="confirm-actions"><button type="button" id="scheduleSaveConfirmNo">Cancel</button><button type="button" id="scheduleSaveConfirmYes">Yes, Save Schedule</button></div></div></div>
-<script src="admin.js"></script>
+<script src="admin.js?v=20261111-time-in-reason"></script>
 </body></html>
